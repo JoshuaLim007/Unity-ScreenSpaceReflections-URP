@@ -16,3 +16,5 @@ Installation Instructions:
 Using it:
 In your URP Asset:
 ![SSR ScreenShot 1](https://i.imgur.com/3qgwonV.png "Instructions")
+![SSR ScreenShot 2](https://imgur.com/a/3biUXfd "Instructions")
+
