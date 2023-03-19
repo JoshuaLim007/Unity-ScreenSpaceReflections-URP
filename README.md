@@ -21,16 +21,26 @@ In your URP Asset
 API:
 ![SSR ScreenShot 2](https://i.imgur.com/3KhAHiX.png "Instructions")
 
-Change SSR settings during runtime:
-LimSSR.SetSettings(ScreenSpaceReflectionsSettings o)
-o.StepStrideLength = The length of each ray march stride. Increasing this will reduce image quality but allow for further objects to be visible in the reflections.
+**Changing settings during runtime**
 
-o.MaxSteps = The number of steps the shader does before ending the ray march. Increasing this will allow further objects to be visible in the reflections but reduce performance.
+    void LimSSR.SetSettings(ScreenSpaceReflectionsSettings o)
 
-o.Downsample = The number of times the working resolution is downscaled by 2x. Increasing this will reduce image quality but increase performance.
+ - `o.StepStrideLength` = The length of each ray march stride. Increasing this will reduce image quality but allow for further objects to be visible in the reflections.
+   
+ - `o.MaxSteps` = The number of steps the shader does before ending the ray march. Increasing this will allow further objects to be visible in the reflections but reduce performance.
 
-o.MinSmoothness = The minimum smoothness of a material has to be in order to have reflections
+   
 
-For the best quality, try to minimize StepStrideLength and maximize MaxSteps
+ - `o.Downsample` = The number of times the working resolution is   downscaled by 2x. Increasing this will reduce image quality but   increase performance.
 
-LimSSR.Enabled = Enables or Disables the effect.
+   
+
+ - `o.MinSmoothness` = The minimum smoothness of a material has to be in order to have reflections.
+
+> For the best quality, try to minimize `StepStrideLength` and maximize `MaxSteps`
+
+    bool LimSSR.Enabled
+    
+ - True: Enables effect
+ - False: Disables effect
+
