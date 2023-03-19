@@ -12,3 +12,6 @@ Installation Instructions:
 3. Select "add package from git url"
 4. Paste the link into the text entry
 5. Press "add"
+
+Using it:
+![SSR ScreenShot 1](https://i.imgur.com/3qgwonV.png "Instructions")
