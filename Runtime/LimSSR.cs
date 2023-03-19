@@ -37,6 +37,8 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 maxSteps = screenSpaceReflectionsSettings.MaxSteps,
                 downSample = screenSpaceReflectionsSettings.Downsample,
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
+                SSRShader = ssrFeatureInstance.Settings.SSRShader,
+                SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
             };
         }
 
