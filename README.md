@@ -14,4 +14,5 @@ Installation Instructions:
 5. Press "add"
 
 Using it:
+In your URP Asset:
 ![SSR ScreenShot 1](https://i.imgur.com/3qgwonV.png "Instructions")
