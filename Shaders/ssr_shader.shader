@@ -1,6 +1,6 @@
 // Upgrade NOTE: commented out 'float3 _WorldSpaceCameraPos', a built-in variable
 
-Shader "Hidden/SSR_v3"
+Shader "Hidden/ssr_shader"
 {
     Properties
     {

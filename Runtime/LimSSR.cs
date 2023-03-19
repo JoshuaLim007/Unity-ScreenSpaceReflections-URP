@@ -16,7 +16,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         public uint MinSmoothness;
     }
     [ExecuteAlways]
-    public class ScreenSpaceReflections : ScriptableRendererFeature
+    public class LimSSR : ScriptableRendererFeature
     {
         public static bool Enabled { get; set; } = true;
         public static void SetSettings(ScreenSpaceReflectionsSettings screenSpaceReflectionsSettings)
@@ -111,7 +111,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         }
 
         SsrPass renderPass = null;
-        internal static ScreenSpaceReflections ssrFeatureInstance;
+        internal static LimSSR ssrFeatureInstance;
         [SerializeField] SSRSettings Settings = new SSRSettings();
 
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -250,7 +250,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
 
             if (Settings.SSRShader == null)
             {
-                Settings.SSRShader = Shader.Find("Hidden/SSR_v3");
+                Settings.SSRShader = Shader.Find("Hidden/ssr_shader");
                 if (Settings.SSRShader == null)
                 {
                     return false;
