@@ -104,9 +104,9 @@ Shader "Hidden/ssr_shader"
                 float cameraViewReflectDot = saturate(dot(_WorldSpaceViewDir, reflectionRay));
 
                 float thickness = stride * 2;
-
-                stride /= sqrt(1 - viewReflectDot);
-                thickness /= sqrt(1 - viewReflectDot);
+                float oneMinusViewReflectDot = sqrt(1 - viewReflectDot);
+                stride /= oneMinusViewReflectDot;
+                thickness /= oneMinusViewReflectDot;
 
 
                 int d = 0;
@@ -169,7 +169,7 @@ Shader "Hidden/ssr_shader"
                         hit = 0;
                     }
 
-                    const int stepCount = 8;
+                    const int stepCount = 16;
                     int binarySearchSteps = stepCount * hit;
 
                     [loop]
@@ -198,7 +198,8 @@ Shader "Hidden/ssr_shader"
 
                         float sd = tex2D(_CameraDepthTexture, uv.xy).r;
                         depthDelta = currentPosition.z - LinearEyeDepth(sd);
-                        if (abs(depthDelta) > 1 / float(i)) {
+                        float minv = 1 / (oneMinusViewReflectDot * float(i));
+                        if (abs(depthDelta) > minv) {
                             hit = 0;
                             break;
                         }
