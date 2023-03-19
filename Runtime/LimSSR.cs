@@ -13,11 +13,21 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         public float StepStrideLength;
         public float MaxSteps;
         public uint Downsample;
-        public uint MinSmoothness;
+        public float MinSmoothness;
     }
     [ExecuteAlways]
     public class LimSSR : ScriptableRendererFeature
     {
+        public static ScreenSpaceReflectionsSettings GetSettings()
+        {
+            return new ScreenSpaceReflectionsSettings()
+            {
+                Downsample = ssrFeatureInstance.Settings.downSample,
+                MaxSteps = ssrFeatureInstance.Settings.maxSteps,
+                MinSmoothness = ssrFeatureInstance.Settings.minSmoothness,
+                StepStrideLength = ssrFeatureInstance.Settings.stepStrideLength,
+            };
+        }
         public static bool Enabled { get; set; } = true;
         public static void SetSettings(ScreenSpaceReflectionsSettings screenSpaceReflectionsSettings)
         {
@@ -26,7 +36,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 stepStrideLength = Mathf.Clamp(screenSpaceReflectionsSettings.StepStrideLength, 0.001f, float.MaxValue),
                 maxSteps = screenSpaceReflectionsSettings.MaxSteps,
                 downSample = screenSpaceReflectionsSettings.Downsample,
-                minSmoothness = screenSpaceReflectionsSettings.MinSmoothness,
+                minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
             };
         }
 
