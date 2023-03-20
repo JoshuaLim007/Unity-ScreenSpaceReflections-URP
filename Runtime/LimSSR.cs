@@ -35,7 +35,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             {
                 stepStrideLength = Mathf.Clamp(screenSpaceReflectionsSettings.StepStrideLength, 0.001f, float.MaxValue),
                 maxSteps = screenSpaceReflectionsSettings.MaxSteps,
-                downSample = screenSpaceReflectionsSettings.Downsample,
+                downSample = (uint)Mathf.Clamp(screenSpaceReflectionsSettings.Downsample,0,2),
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
@@ -109,10 +109,11 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         {
             [Min(0.001f)]
             [Tooltip("Raymarch step length (IMPACTS VISUAL QUALITY)")]
-            public float stepStrideLength = 0.25f;
+            public float stepStrideLength = .03f;
             [Tooltip("Maximum length of a raycast (IMPACTS PERFORMANCE) ")]
-            public float maxSteps = 32;
+            public float maxSteps = 128;
             [Tooltip("1 / (value + 1) = resolution scale")]
+            [Range(0,2)]
             public uint downSample = 0;
             [Min(0)]
             [Tooltip("Minimum smoothness value to have ssr work")]

@@ -70,21 +70,23 @@ Shader "Hidden/ssr_shader"
                 float t2 = smoothstep(0, .1, xDif);
                 return saturate(t2 * t1);
             }
-
+            //inline float IGN(int pixelX, int pixelY, int frame)
+            //{
+            //    frame = frame % 64; // need to periodically reset frame to avoid numerical issues
+            //    float x = float(pixelX) + 5.588238f * float(frame);
+            //    float y = float(pixelY) + 5.588238f * float(frame);
+            //    return fmod(52.9829189f * fmod(0.06711056f * float(x) + 0.00583715f * float(y), 1.0f), 1.0f);
+            //}
             float4 frag(v2f i) : SV_Target
             {
-
-
-
                 float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
                 [branch]
-                if (Linear01Depth(rawDepth) == 1) {
+                if (rawDepth == 0) {
                     return float4(0, 0, 0, 0);
                 }
                 float4 gbuff = tex2D(_GBuffer2, i.uv);
                 float smoothness = gbuff.w;
                 float stepS = smoothstep(minSmoothness, 1, smoothness);
-                gbuff = tex2D(_GBuffer2, i.uv);
                 float3 normal = normalize(gbuff.xyz);
 
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
@@ -223,10 +225,6 @@ Shader "Hidden/ssr_shader"
                 float fresnal = lerp(pf, 1.0, pow(viewReflectDot, 1 / pf));
                 maskOut *= stepS * hit * fresnal;
 
-                [flatten]
-                if (hit == 0) {
-                    maskOut = 0;
-                }
                 return float4(currentScreenSpacePosition, stepS, maskOut * progress);
             }
             ENDCG
@@ -299,7 +297,7 @@ Shader "Hidden/ssr_shader"
             float4 frag(v2f i) : SV_Target
             {
                 float dither = Dither8x8(i.uv.xy * _RenderScale, 0);
-                float ditherDiry = ((int(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
+                float ditherDiry = ((floor(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
 
                 float4 maint = tex2D(_MainTex, i.uv);
                 float4 reflectedUv = tex2D(_ReflectedColorMap, i.uv);
