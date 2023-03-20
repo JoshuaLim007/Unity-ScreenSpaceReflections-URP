@@ -1,6 +1,6 @@
 {
     "name": "com.limworks.urpssrpackage",
-    "version": "1.1.5",
+    "version": "1.2.5",
     "displayName": "Unity URP SSR",
     "description": "Screen space reflections solution for Unity URP. Requires the URP asset to be in defered mode in order for this to work.",
     "unity": "2021.3",
