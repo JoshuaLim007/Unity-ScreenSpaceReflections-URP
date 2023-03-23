@@ -4,10 +4,10 @@ SSR solution for Unity URP
 ![SSR ScreenShot](https://i.imgur.com/Um2zfmO.jpg "SSR Sample Scene")
 
 Requirements:
- - Unity URP 12
- - Unity 2021 LTS
+ - Unity URP 12 or newer
+ - Unity 2021 LTS or newer
 
-Will not work with any other Unity Versions. Does not work with URP 14 or URP 11. Currently this SSR solution does not support VR.
+Currently this SSR solution does not support VR.
 
 Installation Instructions:
 1. Copy: "https://github.com/JoshuaLim007/Unity-ScreenSpaceReflections-URP.git"
