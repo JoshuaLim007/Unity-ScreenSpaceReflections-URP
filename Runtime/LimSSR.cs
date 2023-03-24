@@ -46,9 +46,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         public class SsrPass : ScriptableRenderPass
         {
             public RenderTargetIdentifier Source { get; internal set; }
-            RTHandle ReflectionMap;
             int reflectionMapID;
-            RTHandle tempRenderTarget;
             int tempRenderID;
 
             internal SSRSettings Settings { get; set; }
@@ -65,27 +63,22 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
             {
                 base.Configure(cmd, cameraTextureDescriptor);
-                ConfigureInput(ScriptableRenderPassInput.Motion | ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Normal);
+                //ConfigureInput(ScriptableRenderPassInput.Motion | ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Normal);
 
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.DefaultHDR;
                 cameraTextureDescriptor.mipCount = 8;
                 cameraTextureDescriptor.autoGenerateMips = true;
                 cameraTextureDescriptor.useMipMap = true;
 
-                ReflectionMap = RTHandles.Alloc("_ReflectedColorMap", name: "_ReflectedColorMap");
-                reflectionMapID = Shader.PropertyToID(ReflectionMap.name);
-                //ReflectionMap.Init("_ReflectedColorMap");
+                reflectionMapID = Shader.PropertyToID("_ReflectedColorMap");
 
                 float downScaler = Scale;
                 downScaledX = (ScreenWidth / (float)(downScaler));
                 downScaledY = (ScreenHeight / (float)(downScaler));
                 cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(downScaledX), Mathf.CeilToInt(downScaledY), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
 
-                //duplicate source
-                tempRenderTarget = RTHandles.Alloc("_MainTex", name: "_MainTex");
-                tempRenderID = Shader.PropertyToID(tempRenderTarget.name);
+                tempRenderID = Shader.PropertyToID("_TempTex");
                 cmd.GetTemporaryRT(tempRenderID, cameraTextureDescriptor, FilterMode.Trilinear);
-                cmd.Blit(Source, tempRenderID);
             }
 
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
@@ -200,7 +193,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 Settings.SSR_Instance.SetFloat("_RenderScale", renderingData.cameraData.renderScale);
             }
 #else
-            Settings.SSRFragmentShader.SetFloat("_RenderScale", renderingData.cameraData.renderScale);
+            Settings.SSR_Instance.SetFloat("_RenderScale", renderingData.cameraData.renderScale);
 #endif
             Settings.SSR_Instance.SetMatrix("_InverseProjectionMatrix", projectionMatrix.inverse);
             Settings.SSR_Instance.SetMatrix("_ProjectionMatrix", projectionMatrix);
@@ -208,7 +201,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             Settings.SSR_Instance.SetMatrix("_ViewMatrix", viewMatrix);
         }
 
-
+        [System.Obsolete("Avoid using PersistantRT",true)]
         class PersistantRT
         {
             public RenderTexture[] rt { get; private set; }
