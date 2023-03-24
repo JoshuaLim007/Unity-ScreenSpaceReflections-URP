@@ -4,7 +4,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering;
-using Unity.Rendering;
+//using Unity.Rendering;
 
 namespace LimWorks.Rendering.ScreenSpaceReflections
 {
@@ -46,8 +46,10 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         public class SsrPass : ScriptableRenderPass
         {
             public RenderTargetIdentifier Source { get; internal set; }
-            RenderTargetHandle ReflectionMap;
-            RenderTargetHandle tempRenderTarget;
+            RTHandle ReflectionMap;
+            int reflectionMapID;
+            RTHandle tempRenderTarget;
+            int tempRenderID;
 
             internal SSRSettings Settings { get; set; }
             float downScaledX;
@@ -70,36 +72,40 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 cameraTextureDescriptor.autoGenerateMips = true;
                 cameraTextureDescriptor.useMipMap = true;
 
-                ReflectionMap.Init("_ReflectedColorMap");
+                ReflectionMap = RTHandles.Alloc("_ReflectedColorMap", name: "_ReflectedColorMap");
+                reflectionMapID = Shader.PropertyToID(ReflectionMap.name);
+                //ReflectionMap.Init("_ReflectedColorMap");
 
                 float downScaler = Scale;
                 downScaledX = (ScreenWidth / (float)(downScaler));
                 downScaledY = (ScreenHeight / (float)(downScaler));
-                cmd.GetTemporaryRT(ReflectionMap.id, Mathf.CeilToInt(downScaledX), Mathf.CeilToInt(downScaledY), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
+                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(downScaledX), Mathf.CeilToInt(downScaledY), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
 
                 //duplicate source
-                cmd.GetTemporaryRT(tempRenderTarget.id, cameraTextureDescriptor, FilterMode.Trilinear);
-                cmd.Blit(Source, tempRenderTarget.id);
+                tempRenderTarget = RTHandles.Alloc("_MainTex", name: "_MainTex");
+                tempRenderID = Shader.PropertyToID(tempRenderTarget.name);
+                cmd.GetTemporaryRT(tempRenderID, cameraTextureDescriptor, FilterMode.Trilinear);
+                cmd.Blit(Source, tempRenderID);
             }
 
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-
                 CommandBuffer commandBuffer = CommandBufferPool.Get("Screen space reflections");
 
                 //calculate reflection
-                commandBuffer.Blit(Source, ReflectionMap.id, Settings.SSR_Instance, 0);
+                commandBuffer.Blit(Source, reflectionMapID, Settings.SSR_Instance, 0);
 
                 //compose reflection with main texture
-                commandBuffer.Blit(tempRenderTarget.id, Source, Settings.SSR_Instance, 1);
+                commandBuffer.Blit(Source, tempRenderID);
+                commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 1);
                 context.ExecuteCommandBuffer(commandBuffer);
 
                 CommandBufferPool.Release(commandBuffer);
             }
             public override void FrameCleanup(CommandBuffer cmd)
             {
-                cmd.ReleaseTemporaryRT(tempRenderTarget.id);
-                cmd.ReleaseTemporaryRT(ReflectionMap.id);
+                cmd.ReleaseTemporaryRT(tempRenderID);
+                cmd.ReleaseTemporaryRT(reflectionMapID);
             }
 
         }
@@ -140,6 +146,47 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 return;
             }
 
+#if UNITY_2022_1_OR_NEWER
+#else
+            SetMaterialProperties(in renderingData);
+            renderPass.Source = renderer.cameraColorTarget;
+#endif
+            Settings.SSR_Instance.SetVector("_WorldSpaceViewDir", renderingData.cameraData.camera.transform.forward);
+
+            renderingData.cameraData.camera.depthTextureMode |= (DepthTextureMode.MotionVectors | DepthTextureMode.Depth | DepthTextureMode.DepthNormals);
+            float renderscale = renderingData.cameraData.isSceneViewCamera ? 1 : renderingData.cameraData.renderScale;
+
+            renderPass.RenderScale = renderscale;
+            renderPass.ScreenHeight = renderingData.cameraData.camera.pixelHeight * renderscale;
+            renderPass.ScreenWidth = renderingData.cameraData.camera.pixelWidth * renderscale;
+
+            Settings.SSR_Instance.SetFloat("stride", Settings.stepStrideLength);
+            Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
+            Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
+            renderer.EnqueuePass(renderPass);
+        }
+
+#if UNITY_2022_1_OR_NEWER
+        public override void SetupRenderPasses(ScriptableRenderer renderer, in RenderingData renderingData)
+        {
+            if (!renderingData.cameraData.postProcessEnabled || !Enabled)
+            {
+                return;
+            }
+
+            if (!GetMaterial())
+            {
+                Debug.LogError("Cannot find ssr shader!");
+                return;
+            }
+
+            SetMaterialProperties(in renderingData);
+            renderPass.Source = renderer.cameraColorTargetHandle;
+        }
+#endif
+        //Called from SetupRenderPasses in urp 13+ (2022.1+). called from AddRenderPasses in URP 12 (2021.3)
+        void SetMaterialProperties(in RenderingData renderingData)
+        {
             var projectionMatrix = renderingData.cameraData.GetGPUProjectionMatrix();
             var viewMatrix = renderingData.cameraData.GetViewMatrix();
 
@@ -159,21 +206,8 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             Settings.SSR_Instance.SetMatrix("_ProjectionMatrix", projectionMatrix);
             Settings.SSR_Instance.SetMatrix("_InverseViewMatrix", viewMatrix.inverse);
             Settings.SSR_Instance.SetMatrix("_ViewMatrix", viewMatrix);
-            Settings.SSR_Instance.SetVector("_WorldSpaceViewDir", renderingData.cameraData.camera.transform.forward);
-
-            renderingData.cameraData.camera.depthTextureMode |= (DepthTextureMode.MotionVectors | DepthTextureMode.Depth | DepthTextureMode.DepthNormals);
-            float renderscale = renderingData.cameraData.isSceneViewCamera ? 1 : renderingData.cameraData.renderScale;
-
-            renderPass.RenderScale = renderscale;
-            renderPass.ScreenHeight = renderingData.cameraData.camera.pixelHeight * renderscale;
-            renderPass.ScreenWidth = renderingData.cameraData.camera.pixelWidth * renderscale;
-            renderPass.Source = renderer.cameraColorTarget;
-
-            Settings.SSR_Instance.SetFloat("stride", Settings.stepStrideLength);
-            Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
-            Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
-            renderer.EnqueuePass(renderPass);
         }
+
 
         class PersistantRT
         {
