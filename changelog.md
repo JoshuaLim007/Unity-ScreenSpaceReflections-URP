@@ -1,5 +1,9 @@
 # Change Log:
 
+## 3.0.0
+ - Added Hi Z tracing mode
+ - Created Hi Z depth buffer renderer
+
 ## 2.0.0
  - Added URP 13/14 Support
  - Fixed major build error
