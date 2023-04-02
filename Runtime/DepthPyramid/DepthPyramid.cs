@@ -73,7 +73,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 //sliceScaleBuffer.SetData(tempScale);
                 //Shader.SetGlobalConstantBuffer("_DepthPyramidScales", sliceScaleBuffer, 0, tempScale.Length);
 
-                ConfigureTarget(renderingData.cameraData.renderer.cameraColorTarget, renderingData.cameraData.renderer.cameraDepthTarget);
+                ConfigureTarget(renderingData.cameraData.renderer.cameraColorTargetHandle, renderingData.cameraData.renderer.cameraColorTargetHandle);
             }
             void SetComputeShader(CommandBuffer cmd, RenderTargetIdentifier tArray, int sSlice, int dSlice, float sW, float sH, float dW, float dH)
             {
@@ -129,7 +129,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 {
                     cmd = CommandBufferPool.Get("Debug Depth Pyramid");
                     int debug = Mathf.Clamp(settings.DebugSlice, 0, buffersize - 1);
-                    cmd.Blit(finalDepthPyramid, colorAttachment, Vector2.one * tempSlices[debug].scale, Vector2.zero, debug, 0);
+                    cmd.Blit(finalDepthPyramid, colorAttachmentHandle, Vector2.one * tempSlices[debug].scale, Vector2.zero, debug, 0);
                     context.ExecuteCommandBuffer(cmd);
                     CommandBufferPool.Release(cmd);
                 }
@@ -170,10 +170,15 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             //m_ScriptablePass.Dispose();
             m_ScriptablePass = null;
         }
+
         // Here you can inject one or multiple render passes in the renderer.
         // This method is called when setting up the renderer once per-camera.
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
         {
+            if (!renderingData.cameraData.postProcessEnabled)
+            {
+                return;
+            }
             settings.shader = depthPyramidShader;
             m_ScriptablePass.settings = this.settings;
             renderer.EnqueuePass(m_ScriptablePass);
