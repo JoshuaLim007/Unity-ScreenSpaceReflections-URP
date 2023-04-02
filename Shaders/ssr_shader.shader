@@ -599,7 +599,7 @@ Shader "Hidden/ssr_shader"
                 mask = backFaceDot > 0 && !isSky ? 0 : mask;
 
                 //float4 color = tex2D(_MainTex, intersectPoint.xy);
-                return float4(intersectPoint.xy, stepS, mask);
+                return float4(intersectPoint.xy, stepS, mask * stepS);
                 //return float4(SampleDepth(i.uv, 7),0,0,0);
                 //return float4(mcolor * (1 - mask) + color * mask);
                 //return float4(mask,0,0,0);
