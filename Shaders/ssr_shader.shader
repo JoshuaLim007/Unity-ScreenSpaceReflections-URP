@@ -333,5 +333,279 @@ Shader "Hidden/ssr_shader"
             }
             ENDCG
         }
+    
+        //reflected color and mask only using hi z tracing
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            #define HIZ_START_LEVEL 0
+            #define HIZ_MAX_LEVEL 10
+            #define HIZ_STOP_LEVEL 0
+            #define MAX_ITERATIONS 256
+
+            #include "UnityCG.cginc"
+
+            struct appdata
+            {
+                float4 vertex : POSITION;
+                float2 uv : TEXCOORD0;
+            };
+
+            struct v2f
+            {
+                float2 uv : TEXCOORD0;
+                float4 vertex : SV_POSITION;
+            };
+
+            v2f vert(appdata v)
+            {
+                v2f o;
+                o.vertex = UnityObjectToClipPos(v.vertex);
+                o.uv = v.uv;
+
+                return o;
+            }
+
+            float4x4 _InverseProjectionMatrix;
+            float4x4 _InverseViewMatrix;
+            float4x4 _ProjectionMatrix;
+            float4x4 _ViewMatrix;
+
+            UNITY_DECLARE_TEX2DARRAY(_DepthPyramid);
+            uniform Buffer<float2> _DepthPyramidScales;
+            uniform sampler2D _GBuffer2;
+            uniform sampler2D _CameraDepthTexture;
+            uniform sampler2D _MainTex;
+            float4 _MainTex_TexelSize;
+
+            float3 _WorldSpaceViewDir;
+            float _RenderScale;
+            float stride;
+            float numSteps;
+            float minSmoothness;
+            int iteration;
+            int reflectSky;
+
+            float2 getResolution(int index) {
+                float scale = exp2(index);
+                float2 scaledScreen = _ScreenParams.xy / scale;
+                //scaledScreen.xy = max(floor(scaledScreen.xy), float2(1,1));
+                return scaledScreen.xy;
+            }
+            inline float2 scaledUv(float2 uv, int index) {
+                float2 scaledScreen = getResolution(index);
+                float2 realScale = scaledScreen.xy / _ScreenParams.xy;
+                uv *= realScale;
+                return uv;
+            }
+            inline float SampleDepth(float2 uv, int index) {
+                uv = scaledUv(uv, index);
+                return UNITY_SAMPLE_TEX2DARRAY(_DepthPyramid, float3(uv, index));
+            }
+            inline float2 cross_epsilon() {
+                //float2 scale = _ScreenParams.xy / getResolution(HIZ_START_LEVEL + 1);
+                //return float2(_MainTex_TexelSize.xy * scale);
+                return float2(1 / _ScreenParams.xy / 128);
+            }
+            inline float2 cell(float2 ray, float2 cell_count) { 
+                return floor(ray.xy * cell_count);
+            }
+            inline float2 cell_count(float level) {
+                float2 res = getResolution(level);
+                return res; //_ScreenParams.xy / exp2(level);
+            }
+            inline bool crossed_cell_boundary(float2 cell_id_one, float2 cell_id_two) {
+                return (int)cell_id_one.x != (int)cell_id_two.x || (int)cell_id_one.y != (int)cell_id_two.y;
+            }
+            inline float minimum_depth_plane(float2 ray, float level, float2 cell_count) {
+
+                return SampleDepth(ray, level);
+            }
+            inline float3 intersectDepthPlane(float3 o, float3 d, float t)
+            {
+                return o + d * t;
+            }
+            inline float3 intersectCellBoundary(float3 o, float3 d, float2 cellIndex, float2 cellCount, float2 crossStep, float2 crossOffset, float iteration)
+            {
+                float2 cell_size = 1.0 / cellCount;
+                float2 planes = cellIndex / cellCount + cell_size * crossStep;
+                float2 solutions = (planes - o) / d.xy;
+                float3 intersection_pos = o + d * min(solutions.x, solutions.y);
+                crossOffset.xy *= 50;
+                intersection_pos.xy += (solutions.x < solutions.y) ? float2(crossOffset.x, 0.0) : float2(0.0, crossOffset.y);
+                return intersection_pos;
+
+                //float2 cell_size = 1.0 / cellCount;
+                //float2 planes = cellIndex / cellCount + cell_size * crossStep + crossOffset * 50;
+                //float2 solutions = (planes - o.xy) / d.xy;
+                //float3 intersection_pos = o + d * min(solutions.x, solutions.y);
+                //return intersection_pos;
+            }
+
+
+            float3 hiZTrace(float3 p, float3 v, out float hit, out float iterations, out bool isSky)
+            {
+                const float rootLevel = HIZ_MAX_LEVEL; 
+                float level = HIZ_START_LEVEL;
+
+                iterations = 0;
+                isSky = false;
+                // scale vector such that z is 1.0f (maximum depth)
+                float3 d = v.xyz / v.z;
+
+                // get the cell cross direction and a small offset to enter the next cell when doing cell crossing
+                float2 crossStep = float2(d.x >= 0.0f ? 1.0f : -1.0f, d.y >= 0.0f ? 1.0f : -1.0f);
+                float2 crossOffset = float2(crossStep.xy * cross_epsilon());
+                crossStep.xy = saturate(crossStep.xy);
+
+                // set current ray to original screen coordinate and depth
+                float3 ray = p.xyz;
+
+                // cross to next cell to avoid immediate self-intersection
+                float2 rayCell = cell(ray.xy, cell_count(level));
+
+                ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy, 0);
+
+                [loop]
+                while (level >= HIZ_STOP_LEVEL && iterations < MAX_ITERATIONS)
+                {
+                    // get the cell number of the current ray
+                    const float2 cellCount = cell_count(level);
+                    const float2 oldCellIdx = cell(ray.xy, cellCount);
+
+                    // get the minimum depth plane in which the current ray resides
+                    float minZ = minimum_depth_plane(ray.xy, level, rootLevel);
+
+                    // intersect only if ray depth is below the minimum depth plane
+                    float3 tmpRay = ray;
+
+                    [branch]
+                    if (v.z > 0) {
+                        float min_minus_ray = minZ - ray.z;
+
+                        tmpRay = min_minus_ray > 0 ? intersectDepthPlane(tmpRay, d, min_minus_ray) : tmpRay;
+                        // get the new cell number as well
+                        const float2 newCellIdx = cell(tmpRay.xy, cellCount);
+                        // if the new cell number is different from the old cell number, a cell was crossed
+                        if (crossed_cell_boundary(oldCellIdx, newCellIdx))
+                        {
+                            // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
+                            tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy, iterations); //// NOTE added .xy to o and d arguments
+                            level = min(HIZ_MAX_LEVEL, level + 2.0f);
+                        }
+                        else if(level == HIZ_START_LEVEL) {
+                            float minZOffset = minZ + (.00001 / LinearEyeDepth(1 - p.z));
+
+                            isSky = minZ == 1 ? true : false;
+
+                            [branch]
+                            if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
+                                break;
+                            }
+                        }
+                    }
+                    else if(v.z < minZ) {
+                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount, crossStep, crossOffset, iterations);
+                        level = min(HIZ_MAX_LEVEL, level + 2.0f);
+                    }
+                    
+                    // go down a level in the hi-z buffer
+                    --level;
+
+                    ray.xyz = tmpRay.xyz;
+                    ++iterations;
+                }
+                hit = level < HIZ_STOP_LEVEL ? 1 : 0;
+                return ray;
+            }
+
+            inline float ScreenEdgeMask(float2 clipPos) {
+                float yDif = 1 - abs(clipPos.y);
+                float xDif = 1 - abs(clipPos.x);
+                [flatten]
+                if (yDif < 0 || xDif < 0) {
+                    return 0;
+                }
+                float t1 = smoothstep(0, .2, yDif);
+                float t2 = smoothstep(0, .1, xDif);
+                return saturate(t2 * t1);
+            }
+
+            float4 frag(v2f i) : SV_Target
+            {
+
+                float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
+
+                [branch]
+                if (rawDepth == 0) {
+                    return float4(i.uv.xy, 0, 0);
+                }
+                float4 gbuff = tex2D(_GBuffer2, i.uv);
+                float smoothness = gbuff.w;
+                bool doRayMarch = smoothness > minSmoothness;
+                [branch]
+                if (!doRayMarch) {
+                    return float4(i.uv.xy, 0, 0);
+                }
+                float stepS = smoothstep(minSmoothness, 1, smoothness);
+                float3 normal = normalize(gbuff.xyz);
+
+                float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
+                clipSpace.y *= -1;
+
+                float4 viewSpacePosition = mul(_InverseProjectionMatrix, clipSpace);
+                viewSpacePosition /= viewSpacePosition.w;
+                float4 worldSpacePosition = mul(_InverseViewMatrix, viewSpacePosition);
+                float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
+                float3 reflectionRay_w = reflect(viewDir, normal);
+                float3 reflectionRay_v = mul(_ViewMatrix, float4(reflectionRay_w,0));
+
+
+                float3 vReflectionEndPosInVS = viewSpacePosition + reflectionRay_v * (viewSpacePosition.z * -1);
+                float4 vReflectionEndPosInCS = mul(_ProjectionMatrix, float4(vReflectionEndPosInVS.xyz, 1));
+                vReflectionEndPosInCS /= vReflectionEndPosInCS.w;
+
+
+                vReflectionEndPosInCS.z = 1 - (vReflectionEndPosInCS.z);
+                clipSpace.z = 1 - (clipSpace.z);
+
+                float3 outReflDirInTS = normalize((vReflectionEndPosInCS - clipSpace).xyz);
+                outReflDirInTS.xy *= float2(0.5f, -0.5f);
+                float3 outSamplePosInTS = float3(i.uv, clipSpace.z);
+
+                float viewNormalDot = dot(-viewDir, normal);
+                float viewReflectDot = 1 - saturate(dot(-viewDir, reflectionRay_w));
+                float ddd = saturate(dot(_WorldSpaceViewDir, reflectionRay_w));
+
+                float hit = 0;
+                float mask = smoothstep(0, 0.1f, ddd);
+
+                [branch]
+                if (mask == 0) {
+                    return float4(i.uv.xy, 0, 0);
+                }
+
+                float iterations;
+                bool isSky;
+                float3 intersectPoint = hiZTrace(outSamplePosInTS, outReflDirInTS, hit, iterations, isSky);
+                float edgeMask = ScreenEdgeMask(intersectPoint.xy * 2 - 1);
+                mask *= hit * edgeMask;
+
+                //remove backface intersections
+                float3 currentNormal = tex2D(_GBuffer2, intersectPoint.xy).xyz;
+                float backFaceDot = dot(currentNormal, reflectionRay_w);
+                mask = backFaceDot > 0 && !isSky ? 0 : mask;
+
+                //float4 color = tex2D(_MainTex, intersectPoint.xy);
+                return float4(intersectPoint.xy, stepS, mask);
+                //return float4(SampleDepth(i.uv, 7),0,0,0);
+                //return float4(mcolor * (1 - mask) + color * mask);
+                //return float4(mask,0,0,0);
+                //return float4(iterations / MAX_ITERATIONS,0,0,0);
+            }
+            ENDCG
+        }
     }
 }
