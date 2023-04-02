@@ -72,8 +72,11 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
 
                 //sliceScaleBuffer.SetData(tempScale);
                 //Shader.SetGlobalConstantBuffer("_DepthPyramidScales", sliceScaleBuffer, 0, tempScale.Length);
-
+#if UNITY_2022_1_OR_NEWER
                 ConfigureTarget(renderingData.cameraData.renderer.cameraColorTargetHandle, renderingData.cameraData.renderer.cameraColorTargetHandle);
+#else
+                ConfigureTarget(renderingData.cameraData.renderer.cameraColorTarget, renderingData.cameraData.renderer.cameraDepthTarget);
+#endif
             }
             void SetComputeShader(CommandBuffer cmd, RenderTargetIdentifier tArray, int sSlice, int dSlice, float sW, float sH, float dW, float dH)
             {
@@ -125,14 +128,21 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 context.ExecuteCommandBufferAsync(cmd, ComputeQueueType.Background);
                 CommandBufferPool.Release(cmd);
 
+#if UNITY_EDITOR
                 if (settings.ShowDebug)
                 {
                     cmd = CommandBufferPool.Get("Debug Depth Pyramid");
                     int debug = Mathf.Clamp(settings.DebugSlice, 0, buffersize - 1);
+#if UNITY_2022_1_OR_NEWER
                     cmd.Blit(finalDepthPyramid, colorAttachmentHandle, Vector2.one * tempSlices[debug].scale, Vector2.zero, debug, 0);
+#else
+                    cmd.Blit(finalDepthPyramid, colorAttachment, Vector2.one * tempSlices[debug].scale, Vector2.zero, debug, 0);
+#endif
                     context.ExecuteCommandBuffer(cmd);
                     CommandBufferPool.Release(cmd);
                 }
+#endif
+
             }
             public override void FrameCleanup(CommandBuffer cmd)
             {
