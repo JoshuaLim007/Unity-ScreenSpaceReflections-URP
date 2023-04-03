@@ -379,6 +379,7 @@ Shader "Hidden/ssr_shader"
             uniform sampler2D _CameraDepthTexture;
             uniform sampler2D _MainTex;
             float4 _MainTex_TexelSize;
+            float2 _TargetResolution;
 
             float3 _WorldSpaceViewDir;
             float _RenderScale;
@@ -388,15 +389,18 @@ Shader "Hidden/ssr_shader"
             int iteration;
             int reflectSky;
 
+            inline float2 getScreenResolution() {
+                return _TargetResolution;
+            }
             float2 getResolution(int index) {
                 float scale = exp2(index);
-                float2 scaledScreen = _ScreenParams.xy / scale;
+                float2 scaledScreen = getScreenResolution() / scale;
                 //scaledScreen.xy = max(floor(scaledScreen.xy), float2(1,1));
                 return scaledScreen.xy;
             }
             inline float2 scaledUv(float2 uv, int index) {
                 float2 scaledScreen = getResolution(index);
-                float2 realScale = scaledScreen.xy / _ScreenParams.xy;
+                float2 realScale = scaledScreen.xy / getScreenResolution();
                 uv *= realScale;
                 return uv;
             }
@@ -407,7 +411,7 @@ Shader "Hidden/ssr_shader"
             inline float2 cross_epsilon() {
                 //float2 scale = _ScreenParams.xy / getResolution(HIZ_START_LEVEL + 1);
                 //return float2(_MainTex_TexelSize.xy * scale);
-                return float2(1 / _ScreenParams.xy / 128);
+                return float2(1 / getScreenResolution() / 128);
             }
             inline float2 cell(float2 ray, float2 cell_count) { 
                 return floor(ray.xy * cell_count);
@@ -445,7 +449,7 @@ Shader "Hidden/ssr_shader"
             }
 
 
-            float3 hiZTrace(float3 p, float3 v, out float hit, out float iterations, out bool isSky)
+            float3 hiZTrace(float3 p, float3 v, float MaxIterations, out float hit, out float iterations, out bool isSky)
             {
                 const float rootLevel = HIZ_MAX_LEVEL; 
                 float level = HIZ_START_LEVEL;
@@ -469,7 +473,7 @@ Shader "Hidden/ssr_shader"
                 ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy, 0);
 
                 [loop]
-                while (level >= HIZ_STOP_LEVEL && iterations < MAX_ITERATIONS)
+                while (level >= HIZ_STOP_LEVEL && iterations < MaxIterations)
                 {
                     // get the cell number of the current ray
                     const float2 cellCount = cell_count(level);
@@ -589,7 +593,7 @@ Shader "Hidden/ssr_shader"
 
                 float iterations;
                 bool isSky;
-                float3 intersectPoint = hiZTrace(outSamplePosInTS, outReflDirInTS, hit, iterations, isSky);
+                float3 intersectPoint = hiZTrace(outSamplePosInTS, outReflDirInTS, numSteps, hit, iterations, isSky);
                 float edgeMask = ScreenEdgeMask(intersectPoint.xy * 2 - 1);
                 mask *= hit * edgeMask;
 

@@ -52,7 +52,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                     //tempScale = new float2[buffersize];
                     //sliceScaleBuffer = new ComputeBuffer(buffersize, sizeof(float) * 2, ComputeBufferType.Constant, ComputeBufferMode.Dynamic);
                 }
-
                 float width = renderingData.cameraData.cameraTargetDescriptor.width;
                 float height = renderingData.cameraData.cameraTargetDescriptor.height;
 
@@ -95,14 +94,13 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             // You don't have to call ScriptableRenderContext.submit, the render pipeline will call it at specific points in the pipeline.
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-                int width = renderingData.cameraData.cameraTargetDescriptor.width;
-                int height = renderingData.cameraData.cameraTargetDescriptor.height;
-
+                float width = renderingData.cameraData.cameraTargetDescriptor.width;
+                float height = renderingData.cameraData.cameraTargetDescriptor.height;
                 var cmd = CommandBufferPool.Get("Init Depth Pyramid");
                 finalDepthPyramid = Shader.PropertyToID("_DepthPyramid");
-                cmd.GetTemporaryRTArray(finalDepthPyramid, width, height, buffersize, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
+                cmd.GetTemporaryRTArray(finalDepthPyramid, (int)width, (int)height, buffersize, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
                 cmd.SetComputeTextureParam(settings.shader, 1, "source", finalDepthPyramid);
-                cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt((float)width / Threads), Mathf.CeilToInt((float)height / Threads), 1);
+                cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(width / Threads), Mathf.CeilToInt(height / Threads), 1);
                 context.ExecuteCommandBuffer(cmd);
                 CommandBufferPool.Release(cmd);
 

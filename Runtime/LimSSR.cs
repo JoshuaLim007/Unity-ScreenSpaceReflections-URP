@@ -39,7 +39,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             ssrFeatureInstance.Settings = new SSRSettings()
             {
                 stepStrideLength = Mathf.Clamp(screenSpaceReflectionsSettings.StepStrideLength, 0.001f, float.MaxValue),
-                maxSteps = screenSpaceReflectionsSettings.MaxSteps,
+                maxSteps = Mathf.Max(screenSpaceReflectionsSettings.MaxSteps, 8),
                 downSample = (uint)Mathf.Clamp(screenSpaceReflectionsSettings.Downsample,0,2),
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
@@ -162,10 +162,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             float renderscale = renderingData.cameraData.isSceneViewCamera ? 1 : renderingData.cameraData.renderScale;
 
             renderPass.RenderScale = renderscale;
-            renderPass.ScreenHeight = renderingData.cameraData.camera.pixelHeight * renderscale;
-            renderPass.ScreenWidth = renderingData.cameraData.camera.pixelWidth * renderscale;
+            renderPass.ScreenHeight = renderingData.cameraData.cameraTargetDescriptor.height;
+            renderPass.ScreenWidth = renderingData.cameraData.cameraTargetDescriptor.width;
 
             Settings.SSR_Instance.SetFloat("stride", Settings.stepStrideLength);
+            Settings.SSR_Instance.SetVector("_TargetResolution", new Vector4(renderPass.ScreenWidth, renderPass.ScreenHeight,0,0));
             Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
             Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
             Settings.SSR_Instance.SetInt("reflectSky", Settings.reflectSky ? 1 : 0);
