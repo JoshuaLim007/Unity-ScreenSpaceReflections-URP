@@ -71,12 +71,14 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
             }
 
             EditorGUILayout.PropertyField(m_TracingMode, Styles.TracingMode);
+            EditorGUILayout.PropertyField(m_MinSmoothness, Styles.MinSmoothness);
 
             if (m_TracingMode.enumValueIndex == 0) {
                 EditorGUILayout.PropertyField(m_Downsample, Styles.Downsample);
                 EditorGUILayout.PropertyField(m_StepStrideLength, Styles.StepStrideLength);
                 m_StepStrideLength.floatValue = Mathf.Max(m_StepStrideLength.floatValue, .0001f);
                 EditorGUILayout.PropertyField(m_MaxSteps, Styles.MaxSteps);
+                m_MaxSteps.floatValue = Mathf.Max(m_MaxSteps.floatValue, 8);
             }
             else
             {
@@ -85,10 +87,10 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
                     var name = typeof(DepthPyramid).FullName;
                     Debug.LogError("Current tracing mode requires " + name + ". Add " + name + " as a render feature.");
                 }
-
+                EditorGUILayout.PropertyField(m_MaxSteps, Styles.MaxSteps);
+                m_MaxSteps.floatValue = Mathf.Max(Mathf.Floor(m_MaxSteps.floatValue), 8);
                 EditorGUILayout.PropertyField(m_ReflectSky, Styles.ReflectSky);
             }
-            EditorGUILayout.PropertyField(m_MinSmoothness, Styles.MinSmoothness);
             m_MinSmoothness.floatValue = Mathf.Clamp01(m_MinSmoothness.floatValue);
 
         }
