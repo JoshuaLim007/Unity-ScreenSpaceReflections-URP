@@ -4,6 +4,7 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering;
+using static LimWorks.Rendering.ScreenSpaceReflections.LimSSR;
 //using Unity.Rendering;
 
 namespace LimWorks.Rendering.ScreenSpaceReflections
@@ -18,6 +19,11 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
     [ExecuteAlways]
     public class LimSSR : ScriptableRendererFeature
     {
+        public enum RaytraceModes
+        {
+            LinearTracing = 0,
+            HiZTracing = 1,
+        }
         public static ScreenSpaceReflectionsSettings GetSettings()
         {
             return new ScreenSpaceReflectionsSettings()
@@ -41,6 +47,11 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
             };
         }
+        public static RaytraceModes TracingMode
+        {
+            get { return ssrFeatureInstance.Settings.tracingMode; }
+            set { ssrFeatureInstance.Settings.tracingMode = value; }
+        }
 
         [ExecuteAlways]
         public class SsrPass : ScriptableRenderPass
@@ -56,7 +67,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             public float RenderScale { get; set; }
             public float ScreenHeight { get; set; }
             public float ScreenWidth { get; set; }
-            float Scale => Settings.downSample + 1;
+            float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
 
             //static RenderTexture tempSource;
 
@@ -86,11 +97,19 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
                 CommandBuffer commandBuffer = CommandBufferPool.Get("Screen space reflections");
 
                 //calculate reflection
-                commandBuffer.Blit(Source, reflectionMapID, Settings.SSR_Instance, 0);
+                if (Settings.tracingMode == RaytraceModes.HiZTracing)
+                {
+                    commandBuffer.Blit(Source, reflectionMapID, Settings.SSR_Instance, 2);
+                }
+                else
+                {
+                    commandBuffer.Blit(Source, reflectionMapID, Settings.SSR_Instance, 0);
+                }
 
                 //compose reflection with main texture
                 commandBuffer.Blit(Source, tempRenderID);
                 commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 1);
+                //commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 2);
                 context.ExecuteCommandBuffer(commandBuffer);
 
                 CommandBufferPool.Release(commandBuffer);
@@ -106,18 +125,12 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
         [System.Serializable]
         internal class SSRSettings
         {
-            [Min(0.001f)]
-            [Tooltip("Raymarch step length (IMPACTS VISUAL QUALITY)")]
+            public RaytraceModes tracingMode = RaytraceModes.LinearTracing;
             public float stepStrideLength = .03f;
-            [Tooltip("Maximum length of a raycast (IMPACTS PERFORMANCE) ")]
             public float maxSteps = 128;
-            [Tooltip("1 / (value + 1) = resolution scale")]
-            [Range(0,2)]
             public uint downSample = 0;
-            [Min(0)]
-            [Tooltip("Minimum smoothness value to have ssr work")]
             public float minSmoothness = 0.5f;
-
+            public bool reflectSky = true;
             [HideInInspector] public Material SSR_Instance;
             [HideInInspector] public Shader SSRShader;
         }
@@ -156,6 +169,7 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             Settings.SSR_Instance.SetFloat("stride", Settings.stepStrideLength);
             Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
             Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
+            Settings.SSR_Instance.SetInt("reflectSky", Settings.reflectSky ? 1 : 0);
             renderer.EnqueuePass(renderPass);
         }
 
@@ -201,85 +215,6 @@ namespace LimWorks.Rendering.ScreenSpaceReflections
             Settings.SSR_Instance.SetMatrix("_ViewMatrix", viewMatrix);
         }
 
-        [System.Obsolete("Avoid using PersistantRT",true)]
-        class PersistantRT
-        {
-            public RenderTexture[] rt { get; private set; }
-            public float previousScreenWidth { get; private set; }
-            public float previousScreenHeight { get; private set; }
-
-            int amount;
-
-            public bool HasNull()
-            {
-                for (int i = 0; i < amount; i++)
-                {
-                    if (rt[i] == null)
-                    {
-                        return true;
-                    }
-                }
-                return false;
-            }
-
-            public void ReleaseRt()
-            {
-                for (int i = 0; i < amount; i++)
-                {
-                    if (rt[i] != null)
-                    {
-                        rt[i].Release();
-                    }
-                }
-            }
-            IList<RenderTextureFormat> renderTextureFormats;
-            ~PersistantRT()
-            {
-                ReleaseRt();
-            }
-            public PersistantRT(int amount = 1, IList<RenderTextureFormat> textureFormats = null)
-            {
-                Debug.Log("creating rt");
-
-                this.amount = amount;
-                this.renderTextureFormats = textureFormats;
-                rt = new RenderTexture[amount];
-                for (int i = 0; i < amount; i++)
-                {
-                    if (textureFormats != null)
-                    {
-                        rt[i] = new RenderTexture(Screen.width, Screen.height, 0, textureFormats[i]);
-                    }
-                    else
-                    {
-                        rt[i] = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.DefaultHDR);
-                    }
-                    rt[i].enableRandomWrite = true;
-                }
-            }
-            public void Tick(float screenWidth, float screenHeight)
-            {
-                if (previousScreenWidth != screenWidth || previousScreenHeight != screenHeight)
-                {
-                    Debug.Log("readjusting rt");
-                    ReleaseRt();
-                    for (int i = 0; i < amount; i++)
-                    {
-                        if (renderTextureFormats != null)
-                        {
-                            rt[i] = new RenderTexture((int)screenWidth, (int)screenHeight, 0, renderTextureFormats[i]);
-                        }
-                        else
-                        {
-                            rt[i] = new RenderTexture((int)screenWidth, (int)screenHeight, 0, RenderTextureFormat.DefaultHDR);
-                        }
-                        rt[i].enableRandomWrite = true;
-                    }
-                    previousScreenWidth = screenWidth;
-                    previousScreenHeight = screenHeight;
-                }
-            }
-        }
 
         private bool GetMaterial()
         {

@@ -1,11 +1,15 @@
 {
-    "name": "Limworks.Graphics.URP.SSR",
-    "rootNamespace": "LimWorks.Rendering.ScreenSpaceReflections",
+    "name": "Limworks.Graphics.URP.SSR.Editor",
+    "rootNamespace": "LimWorksEditor.Rendering.ScreenSpaceReflections",
     "references": [
+        "GUID:ebae950a8c8597c4aa1def1e7201c06c",
+        "GUID:c579267770062bf448e75eb160330b7f",
         "GUID:15fc0a57446b3144c949da3e2b9737a9",
         "GUID:df380645f10b7bc4b97d4f5eb6303d95"
     ],
-    "includePlatforms": [],
+    "includePlatforms": [
+        "Editor"
+    ],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
