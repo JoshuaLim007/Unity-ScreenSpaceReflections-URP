@@ -1,4 +1,4 @@
-using LimWorks.Rendering.ScreenSpaceReflections;
+using LimWorks.Rendering.URP.ScreenSpaceReflections;
 using System.Collections;
 using System.Collections.Generic;
 using System.Reflection;
@@ -83,7 +83,7 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
                 if (!AssetHasDepthPyramid())
                 {
                     var name = typeof(DepthPyramid).FullName;
-                    Debug.LogError("Current Tracing Mode requires " + name + ". Add " + name + " as a render feature.");
+                    Debug.LogError("Current tracing mode requires " + name + ". Add " + name + " as a render feature.");
                 }
 
                 EditorGUILayout.PropertyField(m_ReflectSky, Styles.ReflectSky);

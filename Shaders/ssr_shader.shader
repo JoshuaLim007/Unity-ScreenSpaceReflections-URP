@@ -496,7 +496,7 @@ Shader "Hidden/ssr_shader"
                             level = min(HIZ_MAX_LEVEL, level + 2.0f);
                         }
                         else if(level == HIZ_START_LEVEL) {
-                            float minZOffset = (minZ + (_ProjectionParams.y * 0.001) / LinearEyeDepth(1 - p.z));
+                            float minZOffset = (minZ + (_ProjectionParams.y * 0.0025) / LinearEyeDepth(1 - p.z));
 
                             isSky = minZ == 1 ? true : false;
 

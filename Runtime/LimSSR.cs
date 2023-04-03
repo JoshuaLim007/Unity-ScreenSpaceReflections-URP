@@ -4,10 +4,9 @@ using System;
 using UnityEngine;
 using UnityEngine.Rendering.Universal;
 using UnityEngine.Rendering;
-using static LimWorks.Rendering.ScreenSpaceReflections.LimSSR;
 //using Unity.Rendering;
 
-namespace LimWorks.Rendering.ScreenSpaceReflections
+namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 {
     public struct ScreenSpaceReflectionsSettings
     {
