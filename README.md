@@ -3,8 +3,10 @@
 
 SSR solution for Unity URP. Supports Linear Tracing and Hi Z tracing. The package includes SSR render feature and Hierarchical Min-Z Depth Buffer render feature.
 
-**Images**
+**Donation to help me out**
+[Click Here](https://www.paypal.com/donate/?business=757SZWEAT9TBU&no_recurring=1&item_name=Feel%20free%20to%20donate%20anything%20or%20nothing.&currency_code=USD)
 
+**Images**
 ![enter image description here](https://i.imgur.com/HmTwsHf.png)
 ![enter image description here](https://i.imgur.com/IRp0sLc.png)
 ![enter image description here](https://i.imgur.com/cU5WEE7.png)
