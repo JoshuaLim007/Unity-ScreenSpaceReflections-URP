@@ -580,7 +580,7 @@ Shader "Hidden/ssr_shader"
                 float3 outSamplePosInTS = float3(i.uv, clipSpace.z);
 
                 float viewNormalDot = dot(-viewDir, normal);
-                float viewReflectDot = 1 - saturate(dot(-viewDir, reflectionRay_w));
+                float viewReflectDot = saturate(dot(viewDir, reflectionRay_w));
                 float ddd = saturate(dot(_WorldSpaceViewDir, reflectionRay_w));
 
                 float hit = 0;
@@ -602,8 +602,11 @@ Shader "Hidden/ssr_shader"
                 float backFaceDot = dot(currentNormal, reflectionRay_w);
                 mask = backFaceDot > 0 && !isSky ? 0 : mask;
 
+                float pf = pow(smoothness, 4);
+                float fresnal = lerp(pf, 1.0, pow(viewReflectDot, 1 / pf));
+
                 //float4 color = tex2D(_MainTex, intersectPoint.xy);
-                return float4(intersectPoint.xy, stepS, mask * stepS);
+                return float4(intersectPoint.xy, stepS, mask * stepS * fresnal);
                 //return float4(SampleDepth(i.uv, 7),0,0,0);
                 //return float4(mcolor * (1 - mask) + color * mask);
                 //return float4(mask,0,0,0);
