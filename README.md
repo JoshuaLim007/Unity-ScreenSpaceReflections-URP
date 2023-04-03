@@ -1,6 +1,5 @@
 
 # Unity-ScreenSpaceReflections-URP
-
 SSR solution for Unity URP. Supports Linear Tracing and Hi Z tracing. The package includes SSR render feature and Hierarchical Min-Z Depth Buffer render feature.
 
 **Donation to help me out**
