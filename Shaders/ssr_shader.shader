@@ -308,9 +308,9 @@ Shader "Hidden/ssr_shader"
 
                 float stepS = reflectedUv.z;
 
-                reflectedUv += normal * lerp(dither * 0.05f, 0, stepS) * ditherDiry;
-
                 float maskVal = saturate(reflectedUv.w);
+
+                reflectedUv += normal * lerp(dither * 0.05f, 0, stepS) * ditherDiry;
 
                 float lumin = Luminance(maint);
                 lumin -= 1;
@@ -456,6 +456,13 @@ Shader "Hidden/ssr_shader"
 
                 iterations = 0;
                 isSky = false;
+                hit = 0;
+
+                [branch]
+                if (v.z <= 0) {
+                    return float3(0, 0, 0);
+                }
+
                 // scale vector such that z is 1.0f (maximum depth)
                 float3 d = v.xyz / v.z;
 
@@ -485,36 +492,28 @@ Shader "Hidden/ssr_shader"
                     // intersect only if ray depth is below the minimum depth plane
                     float3 tmpRay = ray;
 
-                    [branch]
-                    if (v.z > 0) {
-                        float min_minus_ray = minZ - ray.z;
+                    float min_minus_ray = minZ - ray.z;
 
-                        tmpRay = min_minus_ray > 0 ? intersectDepthPlane(tmpRay, d, min_minus_ray) : tmpRay;
-                        // get the new cell number as well
-                        const float2 newCellIdx = cell(tmpRay.xy, cellCount);
-                        // if the new cell number is different from the old cell number, a cell was crossed
-                        if (crossed_cell_boundary(oldCellIdx, newCellIdx))
-                        {
-                            // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
-                            tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy, iterations); //// NOTE added .xy to o and d arguments
-                            level = min(HIZ_MAX_LEVEL, level + 2.0f);
-                        }
-                        else if(level == HIZ_START_LEVEL) {
-                            float minZOffset = (minZ + (_ProjectionParams.y * 0.0025) / LinearEyeDepth(1 - p.z));
-
-                            isSky = minZ == 1 ? true : false;
-
-                            [branch]
-                            if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
-                                break;
-                            }
-                        }
-                    }
-                    else if(v.z < minZ) {
-                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount, crossStep, crossOffset, iterations);
+                    tmpRay = min_minus_ray > 0 ? intersectDepthPlane(tmpRay, d, min_minus_ray) : tmpRay;
+                    // get the new cell number as well
+                    const float2 newCellIdx = cell(tmpRay.xy, cellCount);
+                    // if the new cell number is different from the old cell number, a cell was crossed
+                    if (crossed_cell_boundary(oldCellIdx, newCellIdx))
+                    {
+                        // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
+                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy, iterations); //// NOTE added .xy to o and d arguments
                         level = min(HIZ_MAX_LEVEL, level + 2.0f);
                     }
-                    
+                    else if (level == HIZ_START_LEVEL) {
+                        float minZOffset = (minZ + (_ProjectionParams.y * 0.0025) / LinearEyeDepth(1 - p.z));
+
+                        isSky = minZ == 1 ? true : false;
+
+                        [branch]
+                        if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
+                            break;
+                        }
+                    }
                     // go down a level in the hi-z buffer
                     --level;
 
