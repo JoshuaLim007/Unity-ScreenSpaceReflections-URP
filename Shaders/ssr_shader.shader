@@ -20,6 +20,7 @@ Shader "Hidden/ssr_shader"
             #pragma shader_feature_local TEMPORAL
 
             #include "UnityCG.cginc"
+			#include "NormalSample.hlsl"
 
             struct appdata
             {
@@ -87,7 +88,8 @@ Shader "Hidden/ssr_shader"
                 float4 gbuff = tex2D(_GBuffer2, i.uv);
                 float smoothness = gbuff.w;
                 float stepS = smoothstep(minSmoothness, 1, smoothness);
-                float3 normal = normalize(gbuff.xyz);
+                //float3 normal = normalize(gbuff.xyz);
+				float3 normal = UnpackNormal(gbuff.xyz);
 
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
                 float4 viewSpacePosition = mul(_InverseProjectionMatrix, clipSpace);
@@ -208,7 +210,8 @@ Shader "Hidden/ssr_shader"
                     }
 
                     //remove backface intersections
-                    float3 currentNormal = tex2D(_GBuffer2, currentScreenSpacePosition).xyz;
+                    //float3 currentNormal = tex2D(_GBuffer2, currentScreenSpacePosition).xyz;
+					float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, currentScreenSpacePosition).xyz);
                     float backFaceDot = dot(currentNormal, reflectionRay);
                     [flatten]
                     if (backFaceDot > 0) {
@@ -239,6 +242,7 @@ Shader "Hidden/ssr_shader"
             #pragma shader_feature_local TEMPORAL
 
             #include "UnityCG.cginc"
+			#include "NormalSample.hlsl"
 
             struct appdata
             {
@@ -302,6 +306,7 @@ Shader "Hidden/ssr_shader"
                 float4 maint = tex2D(_MainTex, i.uv);
                 float4 reflectedUv = tex2D(_ReflectedColorMap, i.uv);
                 float4 normal = tex2D(_GBuffer2, i.uv);
+				normal.xyz = UnpackNormal(normal.xyz);
                 normal = mul(_ViewMatrix, float4(normal.xyz,0));
                 normal = mul(_ProjectionMatrix, float4(normal.xyz,0));
                 normal.y *= -1;
@@ -346,6 +351,7 @@ Shader "Hidden/ssr_shader"
             #define MAX_ITERATIONS 256
 
             #include "UnityCG.cginc"
+			#include "NormalSample.hlsl"
 
             struct appdata
             {
@@ -553,7 +559,8 @@ Shader "Hidden/ssr_shader"
                     return float4(i.uv.xy, 0, 0);
                 }
                 float stepS = smoothstep(minSmoothness, 1, smoothness);
-                float3 normal = normalize(gbuff.xyz);
+                //float3 normal = normalize(gbuff.xyz);
+				float3 normal = UnpackNormal(gbuff.xyz);
 
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
                 clipSpace.y *= -1;
@@ -597,7 +604,8 @@ Shader "Hidden/ssr_shader"
                 mask *= hit * edgeMask;
 
                 //remove backface intersections
-                float3 currentNormal = tex2D(_GBuffer2, intersectPoint.xy).xyz;
+                //float3 currentNormal = tex2D(_GBuffer2, intersectPoint.xy).xyz;
+				float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, intersectPoint.xy).xyz);
                 float backFaceDot = dot(currentNormal, reflectionRay_w);
                 mask = backFaceDot > 0 && !isSky ? 0 : mask;
 
