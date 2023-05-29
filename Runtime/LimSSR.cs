@@ -173,7 +173,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
             Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
             Settings.SSR_Instance.SetInt("reflectSky", Settings.reflectSky ? 1 : 0);
-#if UNITY_EDITOR
+#if UNITY_EDITOR && UNITY_2022_1_OR_NEWER
             var d = UnityEngine.Rendering.Universal.UniversalRenderPipelineDebugDisplaySettings.Instance.AreAnySettingsActive;
             if (!d)
             {

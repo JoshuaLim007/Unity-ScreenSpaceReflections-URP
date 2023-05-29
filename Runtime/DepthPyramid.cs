@@ -190,7 +190,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             }
             settings.shader = depthPyramidShader;
             m_ScriptablePass.settings = this.settings;
-#if UNITY_EDITOR
+#if UNITY_EDITOR && UNITY_2022_1_OR_NEWER
             var d = UnityEngine.Rendering.Universal.UniversalRenderPipelineDebugDisplaySettings.Instance.AreAnySettingsActive;
             if (!d)
             {
