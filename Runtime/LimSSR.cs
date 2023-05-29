@@ -40,10 +40,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             {
                 stepStrideLength = Mathf.Clamp(screenSpaceReflectionsSettings.StepStrideLength, 0.001f, float.MaxValue),
                 maxSteps = Mathf.Max(screenSpaceReflectionsSettings.MaxSteps, 8),
-                downSample = (uint)Mathf.Clamp(screenSpaceReflectionsSettings.Downsample,0,2),
+                downSample = (uint)Mathf.Clamp(screenSpaceReflectionsSettings.Downsample, 0, 2),
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
+                tracingMode = TracingMode
             };
         }
         public static RaytraceModes TracingMode
@@ -170,7 +171,15 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
             Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
             Settings.SSR_Instance.SetInt("reflectSky", Settings.reflectSky ? 1 : 0);
+#if UNITY_EDITOR
+            
+            if (!DebugManager.instance.displayEditorUI)
+            {
+                renderer.EnqueuePass(renderPass);
+            }
+#else
             renderer.EnqueuePass(renderPass);
+#endif
         }
 
 #if UNITY_2022_1_OR_NEWER
