@@ -54,7 +54,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         }
 
         [ExecuteAlways]
-        public class SsrPass : ScriptableRenderPass
+        internal class SsrPass : ScriptableRenderPass
         {
             public RenderTargetIdentifier Source { get; internal set; }
             int reflectionMapID;
@@ -64,10 +64,10 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             float downScaledX;
             float downScaledY;
 
-            public float RenderScale { get; set; }
-            public float ScreenHeight { get; set; }
-            public float ScreenWidth { get; set; }
-            float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
+            internal float RenderScale { get; set; }
+            internal float ScreenHeight { get; set; }
+            internal float ScreenWidth { get; set; }
+            internal float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
 
             //static RenderTexture tempSource;
 
@@ -86,6 +86,9 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 float downScaler = Scale;
                 downScaledX = (ScreenWidth / (float)(downScaler));
                 downScaledY = (ScreenHeight / (float)(downScaler));
+                Settings.SSR_Instance.SetVector("_TargetResolution", new Vector4(ScreenWidth, ScreenHeight, 0, 0));
+
+
                 cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(downScaledX), Mathf.CeilToInt(downScaledY), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
 
                 tempRenderID = Shader.PropertyToID("_TempTex");
@@ -135,7 +138,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             [HideInInspector] public Shader SSRShader;
         }
 
-        SsrPass renderPass = null;
+        internal SsrPass renderPass = null;
         internal static LimSSR ssrFeatureInstance;
         [SerializeField] SSRSettings Settings = new SSRSettings();
 
@@ -167,7 +170,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             renderPass.ScreenWidth = renderingData.cameraData.cameraTargetDescriptor.width;
 
             Settings.SSR_Instance.SetFloat("stride", Settings.stepStrideLength);
-            Settings.SSR_Instance.SetVector("_TargetResolution", new Vector4(renderPass.ScreenWidth, renderPass.ScreenHeight,0,0));
             Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
             Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
             Settings.SSR_Instance.SetInt("reflectSky", Settings.reflectSky ? 1 : 0);

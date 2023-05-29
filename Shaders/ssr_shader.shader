@@ -71,13 +71,6 @@ Shader "Hidden/ssr_shader"
                 float t2 = smoothstep(0, .1, xDif);
                 return saturate(t2 * t1);
             }
-            //inline float IGN(int pixelX, int pixelY, int frame)
-            //{
-            //    frame = frame % 64; // need to periodically reset frame to avoid numerical issues
-            //    float x = float(pixelX) + 5.588238f * float(frame);
-            //    float y = float(pixelY) + 5.588238f * float(frame);
-            //    return fmod(52.9829189f * fmod(0.06711056f * float(x) + 0.00583715f * float(y), 1.0f), 1.0f);
-            //}
             float4 frag(v2f i) : SV_Target
             {
                 float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
@@ -267,6 +260,7 @@ Shader "Hidden/ssr_shader"
             float _RenderScale;
             inline float Dither8x8(float2 ScreenPosition, float c0)
             {
+                c0 *= 2;
                 const float dither[64] =
                 {
                     0, 32, 8, 40, 2, 34, 10, 42,
@@ -284,9 +278,16 @@ Shader "Hidden/ssr_shader"
                 uint index = (uint(uv.x) % 8) * 8 + uint(uv.y) % 8;
 
                 float limit = float(dither[index] + 1) / 64.0;
-                return (c0 - limit) * 0.5 + 0.5;
+                return saturate(c0 - limit);
             }
-            
+
+            inline float IGN(int pixelX, int pixelY, int frame)
+            {
+                frame = frame % 64; // need to periodically reset frame to avoid numerical issues
+                float x = float(pixelX) + 5.588238f * float(frame);
+                float y = float(pixelY) + 5.588238f * float(frame);
+                return fmod(52.9829189f * fmod(0.06711056f * float(x) + 0.00583715f * float(y), 1.0f), 1.0f);
+            }
 
 
             uniform sampler2D _GBuffer1; //metalness color
@@ -300,8 +301,12 @@ Shader "Hidden/ssr_shader"
 
             float4 frag(v2f i) : SV_Target
             {
-                float dither = Dither8x8(i.uv.xy * _RenderScale, 0);
-                float ditherDiry = ((floor(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
+                float dither = Dither8x8(i.uv.xy * _RenderScale, .5);
+                //float dither = IGN(i.uv.x * _ScreenParams.x, i.uv.y * _ScreenParams.y, 0);
+
+                float ditherSign0 = ((floor(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
+                float ditherSign1 = ((floor(i.uv.x * _RenderScale * _ScreenParams.x)) % 2) * 2 - 1;
+                float ditherSign = ditherSign0 * ditherSign1;
 
                 float4 maint = tex2D(_MainTex, i.uv);
                 float4 reflectedUv = tex2D(_ReflectedColorMap, i.uv);
@@ -315,26 +320,27 @@ Shader "Hidden/ssr_shader"
 
                 float maskVal = saturate(reflectedUv.w);
 
-                reflectedUv += normal * lerp(dither * 0.05f, 0, stepS) * ditherDiry;
+                reflectedUv += normal * lerp(dither * 0.05f, 0, stepS) * ditherSign;
 
                 float lumin = Luminance(maint);
                 lumin -= 1;
                 lumin = saturate(lumin);
 
-                float4 gb1 = tex2D(_GBuffer1, i.uv.xy);     
+                float2 gb1 = tex2D(_GBuffer1, i.uv.xy).ra;     
 
-                float fm = clamp(gb1.r, .3, 1);     //smoothness and metalness
+                float fm = clamp(gb1.x, .3, 1);     //smoothness and metalness
                 fm = clamp(fm, 0, 1 - lumin);
                 float ff = 1 - fm;
 
-                float4 reflectedTexture = tex2Dlod(_MainTex, float4(reflectedUv.xy,0, lerp(0, 4, 1 - stepS)));
+                float4 reflectedTexture = tex2Dlod(_MainTex, float4(reflectedUv.xy,0,lerp(0, 5, 1 - stepS)));
 
-                float ao = gb1.a;
+                float ao = gb1.y;
                 float refw = maskVal * ao;
                 float4 res = lerp(maint, maint * ff + reflectedTexture * fm, refw);
 
-                //return reflectedUv;
                 return res;
+                //return float4(ditherSign1 * ditherSign0,0,0,0);
+                //return float4(dither,0,0,0);
             }
             ENDCG
         }
@@ -348,7 +354,6 @@ Shader "Hidden/ssr_shader"
             #define HIZ_START_LEVEL 0
             #define HIZ_MAX_LEVEL 10
             #define HIZ_STOP_LEVEL 0
-            #define MAX_ITERATIONS 256
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
@@ -443,7 +448,10 @@ Shader "Hidden/ssr_shader"
                 float2 planes = cellIndex / cellCount + cell_size * crossStep;
                 float2 solutions = (planes - o) / d.xy;
                 float3 intersection_pos = o + d * min(solutions.x, solutions.y);
-                crossOffset.xy *= 50;
+                
+                //magic scale, it helps with some artifacts
+                crossOffset.xy *= 16;
+
                 intersection_pos.xy += (solutions.x < solutions.y) ? float2(crossOffset.x, 0.0) : float2(0.0, crossOffset.y);
                 return intersection_pos;
 
@@ -504,6 +512,7 @@ Shader "Hidden/ssr_shader"
                     // get the new cell number as well
                     const float2 newCellIdx = cell(tmpRay.xy, cellCount);
                     // if the new cell number is different from the old cell number, a cell was crossed
+                    [branch]
                     if (crossed_cell_boundary(oldCellIdx, newCellIdx))
                     {
                         // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
@@ -617,7 +626,6 @@ Shader "Hidden/ssr_shader"
                 //return float4(SampleDepth(i.uv, 7),0,0,0);
                 //return float4(mcolor * (1 - mask) + color * mask);
                 //return float4(mask,0,0,0);
-                //return float4(iterations / MAX_ITERATIONS,0,0,0);
             }
             ENDCG
         }
