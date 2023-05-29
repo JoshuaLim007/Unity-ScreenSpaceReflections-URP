@@ -174,8 +174,8 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             Settings.SSR_Instance.SetFloat("minSmoothness", Settings.minSmoothness);
             Settings.SSR_Instance.SetInt("reflectSky", Settings.reflectSky ? 1 : 0);
 #if UNITY_EDITOR
-            
-            if (!DebugManager.instance.displayEditorUI)
+            var d = UnityEngine.Rendering.Universal.UniversalRenderPipelineDebugDisplaySettings.Instance.AreAnySettingsActive;
+            if (!d)
             {
                 renderer.EnqueuePass(renderPass);
             }

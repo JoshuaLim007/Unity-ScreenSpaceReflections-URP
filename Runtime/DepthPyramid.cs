@@ -5,6 +5,7 @@ using System.Runtime.ConstrainedExecution;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using static UnityEngine.XR.XRDisplaySubsystem;
 
 namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 {
@@ -189,7 +190,15 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             }
             settings.shader = depthPyramidShader;
             m_ScriptablePass.settings = this.settings;
+#if UNITY_EDITOR
+            var d = UnityEngine.Rendering.Universal.UniversalRenderPipelineDebugDisplaySettings.Instance.AreAnySettingsActive;
+            if (!d)
+            {
+                renderer.EnqueuePass(m_ScriptablePass);
+            }
+#else
             renderer.EnqueuePass(m_ScriptablePass);
+#endif
         }
     }
 }
