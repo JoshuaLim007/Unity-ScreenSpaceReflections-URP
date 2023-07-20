@@ -1,4 +1,5 @@
 
+
 # Unity-ScreenSpaceReflections-URP
 SSR solution for Unity URP. Supports Linear Tracing and Hi Z tracing. The package includes SSR render feature and Hierarchical Min-Z Depth Buffer render feature.
 
@@ -15,7 +16,8 @@ SSR solution for Unity URP. Supports Linear Tracing and Hi Z tracing. The packag
 
 - Unity 2021 LTS or newer
 
-Does not support VR.
+!Does not support VR!
+
   **Installation Instructions:**
 1. Copy: "https://github.com/JoshuaLim007/Unity-ScreenSpaceReflections-URP.git"
 2. Go into the package manager in unity
@@ -55,3 +57,18 @@ Hi Z tracing requires "Depth Pyramid" render feature to be added in the pipeline
     static RaytraceModes TracingMode
 
 > Sets the tracing mode: Linear tracing, or Hi Z tracing
+
+# Resources and References
+
+[Screen Space Reflection | 3D Game Shaders For Beginners (lettier.github.io)](https://lettier.github.io/3d-game-shaders-for-beginners/screen-space-reflection.html)
+
+[Screen Space Reflections : Implementation and optimization – Part 1 : Linear Tracing Method – Sugu Lee (wordpress.com)](https://sugulee.wordpress.com/2021/01/16/performance-optimizations-for-screen-space-reflections-technique-part-1-linear-tracing-method/)
+
+[Screen Space Reflections : Implementation and optimization – Part 2 : HI-Z Tracing Method – Sugu Lee (wordpress.com)](https://sugulee.wordpress.com/2021/01/19/screen-space-reflections-implementation-and-optimization-part-2-hi-z-tracing-method/)
+
+[bitsquid: development blog: Notes On Screen Space HIZ Tracing](http://bitsquid.blogspot.com/2017/08/notes-on-screen-space-hiz-tracing.html)
+
+[Screen Space Reflections in Killing Floor 2 (sakibsaikia.github.io)](https://sakibsaikia.github.io/graphics/2016/12/26/Screen-Space-Reflection-in-Killing-Floor-2.html)
+
+[Hierarchical Depth Buffers - Mike Turitzin](https://miketuritzin.com/post/hierarchical-depth-buffers/#:~:text=Overview,the%20full%2Dresolution%20buffer%27s%20dimensions.)
+
