@@ -112,6 +112,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 //compose reflection with main texture
                 commandBuffer.Blit(Source, tempRenderID);
                 commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 1);
+                //commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 2);
                 context.ExecuteCommandBuffer(commandBuffer);
 
                 CommandBufferPool.Release(commandBuffer);

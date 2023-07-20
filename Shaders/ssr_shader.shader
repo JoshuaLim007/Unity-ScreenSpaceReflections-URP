@@ -17,6 +17,7 @@ Shader "Hidden/ssr_shader"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma shader_feature_local TEMPORAL
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
@@ -50,7 +51,7 @@ Shader "Hidden/ssr_shader"
             float4x4 _ViewMatrix;
 
             uniform sampler2D _MainTex;
-            uniform sampler2D _GBuffer2;
+            uniform sampler2D _GBuffer2; //normals and smoothness
 
             float3 _WorldSpaceViewDir;
             float _RenderScale;
@@ -58,7 +59,6 @@ Shader "Hidden/ssr_shader"
             float numSteps;
             float minSmoothness;
             int iteration;
-            #define binaryStepCount 16
 
             inline float ScreenEdgeMask(float2 clipPos) {
                 float yDif = 1 - abs(clipPos.y);
@@ -67,7 +67,7 @@ Shader "Hidden/ssr_shader"
                 if (yDif < 0 || xDif < 0) {
                     return 0;
                 }
-                float t1 = smoothstep(0, .2, yDif);
+                float t1 = smoothstep(0, .25, yDif);
                 float t2 = smoothstep(0, .1, xDif);
                 return saturate(t2 * t1);
             }
@@ -81,6 +81,7 @@ Shader "Hidden/ssr_shader"
                 float4 gbuff = tex2D(_GBuffer2, i.uv);
                 float smoothness = gbuff.w;
                 float stepS = smoothstep(minSmoothness, 1, smoothness);
+                //float3 normal = normalize(gbuff.xyz);
 				float3 normal = UnpackNormal(gbuff.xyz);
 
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
@@ -95,6 +96,7 @@ Shader "Hidden/ssr_shader"
                 reflectionRay_v.z *= -1;
                 viewSpacePosition.z *= -1;
 
+                float normalViewDot = dot(normal, -viewDir);
                 float viewReflectDot = saturate(dot(viewDir, reflectionRay));
                 float cameraViewReflectDot = saturate(dot(_WorldSpaceViewDir, reflectionRay));
 
@@ -104,6 +106,7 @@ Shader "Hidden/ssr_shader"
                 thickness /= oneMinusViewReflectDot;
 
 
+                int d = 0;
                 int hit = 0;
                 float maskOut = 1;
                 float3 currentPosition = viewSpacePosition.xyz;
@@ -114,7 +117,7 @@ Shader "Hidden/ssr_shader"
                 float maxRayLength = numSteps * stride;
                 float maxDist = lerp(min(viewSpacePosition.z, maxRayLength), maxRayLength, cameraViewReflectDot);
                 float numSteps_f = maxDist / stride;
-                numSteps = max(numSteps_f, 0);
+                numSteps = max(round(numSteps_f),0);
 
                 [branch]
                 if (doRayMarch) {
@@ -163,11 +166,11 @@ Shader "Hidden/ssr_shader"
                         hit = 0;
                     }
 
-                    
-                    int binarySearchSteps = binaryStepCount * hit;
+                    const int stepCount = 16;
+                    int binarySearchSteps = stepCount * hit;
 
                     [loop]
-                    for (int i = 0; i < binaryStepCount; i++)
+                    for (int i = 0; i < binarySearchSteps; i++)
                     {
                         ray *= .5f;
                         [flatten]
@@ -192,7 +195,7 @@ Shader "Hidden/ssr_shader"
 
                         float sd = tex2D(_CameraDepthTexture, uv.xy).r;
                         depthDelta = currentPosition.z - LinearEyeDepth(sd);
-                        float minv = 1 / max((oneMinusViewReflectDot * float(i)), 0.001);
+                        float minv = 1 / (oneMinusViewReflectDot * float(i));
                         if (abs(depthDelta) > minv) {
                             hit = 0;
                             break;
@@ -200,6 +203,7 @@ Shader "Hidden/ssr_shader"
                     }
 
                     //remove backface intersections
+                    //float3 currentNormal = tex2D(_GBuffer2, currentScreenSpacePosition).xyz;
 					float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, currentScreenSpacePosition).xyz);
                     float backFaceDot = dot(currentNormal, reflectionRay);
                     [flatten]
@@ -228,6 +232,7 @@ Shader "Hidden/ssr_shader"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma shader_feature_local TEMPORAL
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
@@ -253,21 +258,21 @@ Shader "Hidden/ssr_shader"
                 return o;
             }
             float _RenderScale;
-            const float dither[64] =
-            {
-                0, 32, 8, 40, 2, 34, 10, 42,
-                48, 16, 56, 24, 50, 18, 58, 26,
-                12, 44, 4, 36, 14, 46, 6, 38,
-                60, 28, 52, 20, 62, 30, 54, 22,
-                3, 35, 11, 43, 1, 33, 9, 41,
-                51, 19, 59, 27, 49, 17, 57, 25,
-                15, 47, 7, 39, 13, 45, 5, 37,
-                63, 31, 55, 23, 61, 29, 53, 21
-            };
-            //dither noise
             inline float Dither8x8(float2 ScreenPosition, float c0)
             {
                 c0 *= 2;
+                const float dither[64] =
+                {
+                    0, 32, 8, 40, 2, 34, 10, 42,
+                    48, 16, 56, 24, 50, 18, 58, 26,
+                    12, 44, 4, 36, 14, 46, 6, 38,
+                    60, 28, 52, 20, 62, 30, 54, 22,
+                    3, 35, 11, 43, 1, 33, 9, 41,
+                    51, 19, 59, 27, 49, 17, 57, 25,
+                    15, 47, 7, 39, 13, 45, 5, 37,
+                    63, 31, 55, 23, 61, 29, 53, 21
+                };
+
                 float2 uv = ScreenPosition.xy * _ScreenParams.xy;
 
                 uint index = (uint(uv.x) % 8) * 8 + uint(uv.y) % 8;
@@ -275,7 +280,7 @@ Shader "Hidden/ssr_shader"
                 float limit = float(dither[index] + 1) / 64.0;
                 return saturate(c0 - limit);
             }
-            //interleaved gradient noise
+
             inline float IGN(int pixelX, int pixelY, int frame)
             {
                 frame = frame % 64; // need to periodically reset frame to avoid numerical issues
@@ -285,10 +290,10 @@ Shader "Hidden/ssr_shader"
             }
 
 
-            uniform sampler2D _GBuffer1;            //metalness color
+            uniform sampler2D _GBuffer1; //metalness color
             uniform sampler2D _ReflectedColorMap;   //contains reflected uv coordinates
-            uniform sampler2D _MainTex;             //main screen color
-            uniform sampler2D _GBuffer2;            //normals and smoothness
+            uniform sampler2D _MainTex;     //main screen color
+            uniform sampler2D _GBuffer2; //normals and smoothness
             float4x4 _InverseProjectionMatrix;
             float4x4 _InverseViewMatrix;
             float4x4 _ProjectionMatrix;
@@ -334,6 +339,8 @@ Shader "Hidden/ssr_shader"
                 float4 res = lerp(maint, maint * ff + reflectedTexture * fm, refw);
 
                 return res;
+                //return float4(ditherSign1 * ditherSign0,0,0,0);
+                //return float4(dither,0,0,0);
             }
             ENDCG
         }
@@ -344,9 +351,7 @@ Shader "Hidden/ssr_shader"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
-            #define HIZ_START_LEVEL 0           //normally in good code, you can start and 
-                                                //stop at higher levels to improve performance, 
-                                                //but my code just shits itself, probably due to not making the depth pyramid correctly
+            #define HIZ_START_LEVEL 0
             #define HIZ_MAX_LEVEL 10
             #define HIZ_STOP_LEVEL 0
 
@@ -380,6 +385,7 @@ Shader "Hidden/ssr_shader"
             float4x4 _ViewMatrix;
 
             UNITY_DECLARE_TEX2DARRAY(_DepthPyramid);
+            uniform Buffer<float2> _DepthPyramidScales;
             uniform sampler2D _GBuffer2;
             uniform sampler2D _CameraDepthTexture;
             uniform sampler2D _MainTex;
@@ -388,6 +394,7 @@ Shader "Hidden/ssr_shader"
 
             float3 _WorldSpaceViewDir;
             float _RenderScale;
+            float stride;
             float numSteps;
             float minSmoothness;
             int iteration;
@@ -396,41 +403,40 @@ Shader "Hidden/ssr_shader"
             inline float2 getScreenResolution() {
                 return _TargetResolution;
             }
-            inline float2 getLevelResolution(int index) {
+            float2 getResolution(int index) {
                 float scale = exp2(index);
                 float2 scaledScreen = getScreenResolution() / scale;
+                //scaledScreen.xy = max(floor(scaledScreen.xy), float2(1,1));
                 return scaledScreen.xy;
             }
             inline float2 scaledUv(float2 uv, int index) {
-                float2 scaledScreen = getLevelResolution(index);
+                float2 scaledScreen = getResolution(index);
                 float2 realScale = scaledScreen.xy / getScreenResolution();
                 uv *= realScale;
                 return uv;
             }
-            inline float sampleDepth(float2 uv, int index) {
+            inline float SampleDepth(float2 uv, int index) {
                 uv = scaledUv(uv, index);
                 return UNITY_SAMPLE_TEX2DARRAY(_DepthPyramid, float3(uv, index));
             }
             inline float2 cross_epsilon() {
-                //multiply by 4 to remove artifacting (magic number)
-                //someone find why a pyramid fractal pattern appears when not multiplying by 4
-                //it appears when the screen resolution is not a power of 2
-                //it probably is something to do with how the depth pyramid is made
-                return float2(1.0f / (4.0f * getScreenResolution()));
+                //float2 scale = _ScreenParams.xy / getResolution(HIZ_START_LEVEL + 1);
+                //return float2(_MainTex_TexelSize.xy * scale);
+                return float2(1 / getScreenResolution() / 128);
             }
             inline float2 cell(float2 ray, float2 cell_count) { 
                 return floor(ray.xy * cell_count);
             }
             inline float2 cell_count(float level) {
-                float2 res = getLevelResolution(level);
-                return res;
+                float2 res = getResolution(level);
+                return res; //_ScreenParams.xy / exp2(level);
             }
             inline bool crossed_cell_boundary(float2 cell_id_one, float2 cell_id_two) {
                 return (int)cell_id_one.x != (int)cell_id_two.x || (int)cell_id_one.y != (int)cell_id_two.y;
             }
             inline float minimum_depth_plane(float2 ray, float level, float2 cell_count) {
 
-                return sampleDepth(ray, level);
+                return SampleDepth(ray, level);
             }
             inline float3 intersectDepthPlane(float3 o, float3 d, float t)
             {
@@ -443,17 +449,24 @@ Shader "Hidden/ssr_shader"
                 float2 solutions = (planes - o) / d.xy;
                 float3 intersection_pos = o + d * min(solutions.x, solutions.y);
                 
+                //magic scale, it helps with some artifacts
+                crossOffset.xy *= 16;
+
                 intersection_pos.xy += (solutions.x < solutions.y) ? float2(crossOffset.x, 0.0) : float2(0.0, crossOffset.y);
                 return intersection_pos;
+
+                //float2 cell_size = 1.0 / cellCount;
+                //float2 planes = cellIndex / cellCount + cell_size * crossStep + crossOffset * 50;
+                //float2 solutions = (planes - o.xy) / d.xy;
+                //float3 intersection_pos = o + d * min(solutions.x, solutions.y);
+                //return intersection_pos;
             }
 
 
-            inline float3 hiZTrace(float3 p, float3 v, float MaxIterations, out float hit, out float iterations, out bool isSky)
+            float3 hiZTrace(float3 p, float3 v, float MaxIterations, out float hit, out float iterations, out bool isSky)
             {
-                const int rootLevel = HIZ_MAX_LEVEL; 
-                const int endLevel = HIZ_STOP_LEVEL;
-                const int startLevel = HIZ_START_LEVEL;
-                int level = HIZ_START_LEVEL;
+                const float rootLevel = HIZ_MAX_LEVEL; 
+                float level = HIZ_START_LEVEL;
 
                 iterations = 0;
                 isSky = false;
@@ -481,7 +494,7 @@ Shader "Hidden/ssr_shader"
                 ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy, 0);
 
                 [loop]
-                while (level >= endLevel && iterations < MaxIterations)
+                while (level >= HIZ_STOP_LEVEL && iterations < MaxIterations)
                 {
                     // get the cell number of the current ray
                     const float2 cellCount = cell_count(level);
@@ -504,12 +517,12 @@ Shader "Hidden/ssr_shader"
                     {
                         // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
                         tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy, iterations); //// NOTE added .xy to o and d arguments
-                        level = min(rootLevel, level + 2.0f);
+                        level = min(HIZ_MAX_LEVEL, level + 2.0f);
                     }
-                    else if (level == startLevel) {
-                        float minZOffset = (minZ + (_ProjectionParams.y * 0.0025f) / LinearEyeDepth(1 - p.z));
+                    else if (level == HIZ_START_LEVEL) {
+                        float minZOffset = (minZ + (_ProjectionParams.y * 0.0025) / LinearEyeDepth(1 - p.z));
 
-                        isSky = minZ == 1;
+                        isSky = minZ == 1 ? true : false;
 
                         [branch]
                         if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
@@ -522,7 +535,7 @@ Shader "Hidden/ssr_shader"
                     ray.xyz = tmpRay.xyz;
                     ++iterations;
                 }
-                hit = level < endLevel ? 1 : 0;
+                hit = level < HIZ_STOP_LEVEL ? 1 : 0;
                 return ray;
             }
 
@@ -555,6 +568,7 @@ Shader "Hidden/ssr_shader"
                     return float4(i.uv.xy, 0, 0);
                 }
                 float stepS = smoothstep(minSmoothness, 1, smoothness);
+                //float3 normal = normalize(gbuff.xyz);
 				float3 normal = UnpackNormal(gbuff.xyz);
 
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
@@ -580,6 +594,7 @@ Shader "Hidden/ssr_shader"
                 outReflDirInTS.xy *= float2(0.5f, -0.5f);
                 float3 outSamplePosInTS = float3(i.uv, clipSpace.z);
 
+                float viewNormalDot = dot(-viewDir, normal);
                 float viewReflectDot = saturate(dot(viewDir, reflectionRay_w));
                 float ddd = saturate(dot(_WorldSpaceViewDir, reflectionRay_w));
 
@@ -598,6 +613,7 @@ Shader "Hidden/ssr_shader"
                 mask *= hit * edgeMask;
 
                 //remove backface intersections
+                //float3 currentNormal = tex2D(_GBuffer2, intersectPoint.xy).xyz;
 				float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, intersectPoint.xy).xyz);
                 float backFaceDot = dot(currentNormal, reflectionRay_w);
                 mask = backFaceDot > 0 && !isSky ? 0 : mask;
@@ -605,7 +621,11 @@ Shader "Hidden/ssr_shader"
                 float pf = pow(smoothness, 4);
                 float fresnal = lerp(pf, 1.0, pow(viewReflectDot, 1 / pf));
 
+                //float4 color = tex2D(_MainTex, intersectPoint.xy);
                 return float4(intersectPoint.xy, stepS, mask * stepS * fresnal);
+                //return float4(SampleDepth(i.uv, 7),0,0,0);
+                //return float4(mcolor * (1 - mask) + color * mask);
+                //return float4(mask,0,0,0);
             }
             ENDCG
         }
