@@ -27,7 +27,7 @@ inline float SampleDepth(uint3 pos) {
     return source[uint3(min(pos.xy, float2(sx-1,sy-1)), pos.z)];
 }
 
-[numthreads(THREADS, THREADS,1)]
+[numthreads(THREADS, THREADS, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     float minValue = -1;
@@ -49,34 +49,6 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     minValue = needExtraSampleX ? min(minValue, min(SampleDepth(prevId + uint3(2, 0, 0)), SampleDepth(prevId + uint3(2, 1, 0)))) : minValue;
     minValue = needExtraSampleY ? min(minValue, min(SampleDepth(prevId + uint3(0, 2, 0)), SampleDepth(prevId + uint3(1, 2, 0)))) : minValue;
     minValue = (needExtraSampleX && needExtraSampleY) ? min(minValue, SampleDepth(prevId + uint3(2, 2, 0)).x) : minValue;
-
-    //int c = 1;
-    //bool shouldIncludeExtraColumnFromPreviousLevel = ((int(dx) & c) != 0);
-    //bool shouldIncludeExtraRowFromPreviousLevel = ((int(dy) & c) != 0);
-    //if (shouldIncludeExtraColumnFromPreviousLevel) {
-    //    float2 extraColumnTexelValues;
-    //    uint3 px = prevId + uint3(2, 0, 0);
-    //    uint3 py = prevId + uint3(2, 1, 0);
-    //    extraColumnTexelValues.x = SampleDepth(px);
-    //    extraColumnTexelValues.y = SampleDepth(py);
-    //    // In the case where the width and height are both odd, need to include the
-    //    // 'corner' value as well.
-    //    if (shouldIncludeExtraRowFromPreviousLevel) {
-    //        uint3 pz = prevId + uint3(2, 2, 0);
-    //        float cornerTexelValue = SampleDepth(pz);
-    //        minValue = min(minValue, cornerTexelValue);
-    //    }
-    //    minValue = min(minValue, min(extraColumnTexelValues.x, extraColumnTexelValues.y));
-    //}
-    //if (shouldIncludeExtraRowFromPreviousLevel) {
-    //    float2 extraRowTexelValues;
-    //    uint3 px = prevId + uint3(0, 2, 0);
-    //    uint3 py = prevId + uint3(1, 2, 0);
-    //    extraRowTexelValues.x = SampleDepth(px);
-    //    extraRowTexelValues.y = SampleDepth(py);
-    //    minValue = min(minValue, min(extraRowTexelValues.x, extraRowTexelValues.y));
-    //}
-    //
     
     source[uint3(id.xy, dSlice)] = minValue;
 }
