@@ -59,8 +59,8 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 for (int i = 0; i < buffersize; i++)
                 {
                     float d = Mathf.Pow(2, i);
-                    tempSlices[i].resolution.x = Mathf.Max(MathF.Floor(width / d), 1);
-                    tempSlices[i].resolution.y = Mathf.Max(MathF.Floor(height / d), 1);
+                    tempSlices[i].resolution.x = Mathf.Max((int)width >> i, 1);
+                    tempSlices[i].resolution.y = Mathf.Max((int)height >> i, 1);
                     tempSlices[i].slice = i;
                     tempSlices[i].scale.x = tempSlices[i].resolution.x / width;
                     tempSlices[i].scale.y = tempSlices[i].resolution.y / height;
@@ -99,6 +99,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 float height = renderingData.cameraData.cameraTargetDescriptor.height;
                 var cmd = CommandBufferPool.Get("Init Depth Pyramid");
                 finalDepthPyramid = Shader.PropertyToID("_DepthPyramid");
+                cmd.SetComputeVectorParam(settings.shader, "screenSize", new Vector2(width, height));
                 cmd.GetTemporaryRTArray(finalDepthPyramid, (int)width, (int)height, buffersize, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
                 cmd.SetComputeTextureParam(settings.shader, 1, "source", finalDepthPyramid);
                 cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(width / Threads), Mathf.CeilToInt(height / Threads), 1);
@@ -154,7 +155,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         {
             [HideInInspector] internal ComputeShader shader;
             [SerializeField] internal bool ShowDebug;
-            [Range(0, buffersize)]
+            [Range(0, buffersize - 1)]
             [SerializeField] internal int DebugSlice;
         }
 

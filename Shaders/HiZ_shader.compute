@@ -12,6 +12,7 @@ float sx;
 float sy;
 float dx;
 float dy;
+uint2 screenSize;
 int sSlice;
 int dSlice;
 
@@ -20,6 +21,9 @@ Texture2D<float> _CameraDepthTexture;
 
 [numthreads(THREADS, THREADS, 1)]
 void DepthCopy(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= screenSize.x || id.y >= screenSize.y) {
+        return;
+    }
     source[uint3(id.xy, 0)] = 1 - _CameraDepthTexture[id.xy];
 }
 
@@ -31,7 +35,7 @@ inline float SampleDepth(uint3 pos) {
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
     float minValue = -1;
-    float2 ratio = float2(sx / dx, sy / dy);
+    float2 ratio = float2(screenSize.x / dx, screenSize.y / dy);
     uint3 prevId = uint3(id.xy << 1, sSlice);
 
     uint3 o1 = prevId + uint3(1, 0, 0);
@@ -44,8 +48,8 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float d3 = SampleDepth(o3);
     minValue = min(min(d0, d1), min(d2, d3));
 
-    bool needExtraSampleX = ratio.x >= 2;
-    bool needExtraSampleY = ratio.y >= 2;
+    bool needExtraSampleX = ratio.x > 2;
+    bool needExtraSampleY = ratio.y > 2;
     minValue = needExtraSampleX ? min(minValue, min(SampleDepth(prevId + uint3(2, 0, 0)), SampleDepth(prevId + uint3(2, 1, 0)))) : minValue;
     minValue = needExtraSampleY ? min(minValue, min(SampleDepth(prevId + uint3(0, 2, 0)), SampleDepth(prevId + uint3(1, 2, 0)))) : minValue;
     minValue = (needExtraSampleX && needExtraSampleY) ? min(minValue, SampleDepth(prevId + uint3(2, 2, 0)).x) : minValue;

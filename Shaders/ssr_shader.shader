@@ -425,8 +425,12 @@ Shader "Hidden/ssr_shader"
                 float2 res = getLevelResolution(level);
                 return res;
             }
+            inline bool floatEqApprox(float a, float b) {
+                const float eps = 0.00001f;
+                return abs(a - b) < eps;
+            }
             inline bool crossed_cell_boundary(float2 cell_id_one, float2 cell_id_two) {
-                return (int)cell_id_one.x != (int)cell_id_two.x || (int)cell_id_one.y != (int)cell_id_two.y;
+                return !floatEqApprox(cell_id_one.x, cell_id_two.x) || !floatEqApprox(cell_id_one.y, cell_id_two.y);
             }
             inline float minimum_depth_plane(float2 ray, float level, float2 cell_count) {
 
@@ -507,7 +511,7 @@ Shader "Hidden/ssr_shader"
                         level = min(rootLevel, level + 2.0f);
                     }
                     else if (level == startLevel) {
-                        float minZOffset = (minZ + (_ProjectionParams.y * 0.0025f) / LinearEyeDepth(1 - p.z));
+                        float minZOffset = (minZ + (_ProjectionParams.y * 0.005f) / LinearEyeDepth(1 - p.z));
 
                         isSky = minZ == 1;
 
