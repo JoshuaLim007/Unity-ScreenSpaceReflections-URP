@@ -58,6 +58,16 @@ Hi Z tracing requires "Depth Pyramid" render feature to be added in the pipeline
 
 > Sets the tracing mode: Linear tracing, or Hi Z tracing
 
+# Known Limitations and bugs
+- Wider apart the near and far clip plane, more banding artifact appears.
+- Far reflections are inaccurate and have banding artifact.
+- Making the hi-z trace more accurate causes triangle like artifacts to appear.
+- Non-power of 2 resolution are the core cause of the artifacts to appear. Current implementation does not handle non-power of 2 resolutions correctly.
+- Transparent objects cannot have reflections.
+- Transparent objects are not correctly reflected onto objects.
+- Downsampling ssr on hi-trace mode causes it to break.
+- Current fix for non-power of 2 resolutions causes warping around edges of objects with a reflection behind it. 
+
 # Resources and References
 
 [Screen Space Reflection | 3D Game Shaders For Beginners (lettier.github.io)](https://lettier.github.io/3d-game-shaders-for-beginners/screen-space-reflection.html)
