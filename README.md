@@ -66,7 +66,8 @@ Hi Z tracing requires "Depth Pyramid" render feature to be added in the pipeline
 - Transparent objects cannot have reflections.
 - Transparent objects are not correctly reflected onto objects.
 - Downsampling ssr on hi-trace mode causes it to break.
-- Current fix for non-power of 2 resolutions causes warping around edges of objects with a reflection behind it. 
+- Current fix for non-power of 2 resolutions causes warping around edges of objects with a reflection behind it.
+- Hi-z trace cannot have camera facing reflections.
 
 # Resources and References
 
