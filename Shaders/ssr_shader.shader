@@ -151,7 +151,7 @@ Shader "Hidden/ssr_shader"
                             depthDelta = currentPosition.z - LinearEyeDepth(sampledDepth);
 
                             [branch]
-                            if (depthDelta > 0) {
+                            if (depthDelta > 0 && depthDelta < stride * 2) {
                                 currentScreenSpacePosition = uv.xy;
                                 hit = 1;
                                 break;
@@ -381,7 +381,6 @@ Shader "Hidden/ssr_shader"
 
             UNITY_DECLARE_TEX2DARRAY(_DepthPyramid);
             uniform sampler2D _GBuffer2;
-            uniform sampler2D _CameraDepthTexture;
             uniform sampler2D _MainTex;
             float4 _MainTex_TexelSize;
             float2 _TargetResolution;
@@ -416,7 +415,7 @@ Shader "Hidden/ssr_shader"
                 //someone find why a pyramid fractal pattern appears when not multiplying by 4
                 //it appears when the screen resolution is not a power of 2
                 //it probably is something to do with how the depth pyramid is made
-                return float2(1.0f / (4.0f * getScreenResolution()));
+                return float2(1.0f / (128.0f * getScreenResolution()));
             }
             inline float2 cell(float2 ray, float2 cell_count) { 
                 return floor(ray.xy * cell_count);
@@ -432,7 +431,7 @@ Shader "Hidden/ssr_shader"
             inline bool crossed_cell_boundary(float2 cell_id_one, float2 cell_id_two) {
                 return !floatEqApprox(cell_id_one.x, cell_id_two.x) || !floatEqApprox(cell_id_one.y, cell_id_two.y);
             }
-            inline float minimum_depth_plane(float2 ray, float level, float2 cell_count) {
+            inline float minimum_depth_plane(float2 ray, float level) {
 
                 return sampleDepth(ray, level);
             }
@@ -440,7 +439,7 @@ Shader "Hidden/ssr_shader"
             {
                 return o + d * t;
             }
-            inline float3 intersectCellBoundary(float3 o, float3 d, float2 cellIndex, float2 cellCount, float2 crossStep, float2 crossOffset, float iteration)
+            inline float3 intersectCellBoundary(float3 o, float3 d, float2 cellIndex, float2 cellCount, float2 crossStep, float2 crossOffset)
             {
                 float2 cell_size = 1.0 / cellCount;
                 float2 planes = cellIndex / cellCount + cell_size * crossStep;
@@ -482,7 +481,7 @@ Shader "Hidden/ssr_shader"
                 // cross to next cell to avoid immediate self-intersection
                 float2 rayCell = cell(ray.xy, cell_count(level));
 
-                ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy, 0);
+                ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy);
 
                 [loop]
                 while (level >= endLevel && iterations < MaxIterations)
@@ -492,7 +491,7 @@ Shader "Hidden/ssr_shader"
                     const float2 oldCellIdx = cell(ray.xy, cellCount);
 
                     // get the minimum depth plane in which the current ray resides
-                    float minZ = minimum_depth_plane(ray.xy, level, rootLevel);
+                    float minZ = minimum_depth_plane(ray.xy, level);
 
                     // intersect only if ray depth is below the minimum depth plane
                     float3 tmpRay = ray;
@@ -507,17 +506,18 @@ Shader "Hidden/ssr_shader"
                     if (crossed_cell_boundary(oldCellIdx, newCellIdx))
                     {
                         // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
-                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy, iterations); //// NOTE added .xy to o and d arguments
+                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy); //// NOTE added .xy to o and d arguments
                         level = min(rootLevel, level + 2.0f);
                     }
                     else if (level == startLevel) {
-                        float minZOffset = (minZ + (_ProjectionParams.y * 0.005f) / LinearEyeDepth(1 - p.z));
-
+                        float minZOffset = (minZ + (1 - p.z) * 0.005);
                         isSky = minZ == 1;
 
                         [branch]
                         if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
-                            break;
+                            tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy);
+                            level = HIZ_START_LEVEL + 1;
+                            //break;
                         }
                     }
                     // go down a level in the hi-z buffer
@@ -545,7 +545,7 @@ Shader "Hidden/ssr_shader"
             float4 frag(v2f i) : SV_Target
             {
 
-                float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
+                float rawDepth = 1 - sampleDepth(i.uv, 0);
 
                 [branch]
                 if (rawDepth == 0) {
@@ -572,7 +572,7 @@ Shader "Hidden/ssr_shader"
                 float3 reflectionRay_v = mul(_ViewMatrix, float4(reflectionRay_w,0));
 
 
-                float3 vReflectionEndPosInVS = viewSpacePosition + reflectionRay_v * (viewSpacePosition.z * -1);
+                float3 vReflectionEndPosInVS = viewSpacePosition + reflectionRay_v * -viewSpacePosition.z;
                 float4 vReflectionEndPosInCS = mul(_ProjectionMatrix, float4(vReflectionEndPosInVS.xyz, 1));
                 vReflectionEndPosInCS /= vReflectionEndPosInCS.w;
 
