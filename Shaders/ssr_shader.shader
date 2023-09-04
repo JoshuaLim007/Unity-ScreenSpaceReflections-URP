@@ -20,6 +20,7 @@ Shader "Hidden/ssr_shader"
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
+            #include "Common.hlsl"
 
             struct appdata
             {
@@ -60,17 +61,6 @@ Shader "Hidden/ssr_shader"
             int iteration;
             #define binaryStepCount 16
 
-            inline float ScreenEdgeMask(float2 clipPos) {
-                float yDif = 1 - abs(clipPos.y);
-                float xDif = 1 - abs(clipPos.x);
-                [flatten]
-                if (yDif < 0 || xDif < 0) {
-                    return 0;
-                }
-                float t1 = smoothstep(0, .2, yDif);
-                float t2 = smoothstep(0, .1, xDif);
-                return saturate(t2 * t1);
-            }
             float4 frag(v2f i) : SV_Target
             {
                 float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
@@ -231,6 +221,7 @@ Shader "Hidden/ssr_shader"
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
+            #include "Common.hlsl"
 
             struct appdata
             {
@@ -253,37 +244,6 @@ Shader "Hidden/ssr_shader"
                 return o;
             }
             float _RenderScale;
-            const float dither[64] =
-            {
-                0, 32, 8, 40, 2, 34, 10, 42,
-                48, 16, 56, 24, 50, 18, 58, 26,
-                12, 44, 4, 36, 14, 46, 6, 38,
-                60, 28, 52, 20, 62, 30, 54, 22,
-                3, 35, 11, 43, 1, 33, 9, 41,
-                51, 19, 59, 27, 49, 17, 57, 25,
-                15, 47, 7, 39, 13, 45, 5, 37,
-                63, 31, 55, 23, 61, 29, 53, 21
-            };
-            //dither noise
-            inline float Dither8x8(float2 ScreenPosition, float c0)
-            {
-                c0 *= 2;
-                float2 uv = ScreenPosition.xy * _ScreenParams.xy;
-
-                uint index = (uint(uv.x) % 8) * 8 + uint(uv.y) % 8;
-
-                float limit = float(dither[index] + 1) / 64.0;
-                return saturate(c0 - limit);
-            }
-            //interleaved gradient noise
-            inline float IGN(int pixelX, int pixelY, int frame)
-            {
-                frame = frame % 64; // need to periodically reset frame to avoid numerical issues
-                float x = float(pixelX) + 5.588238f * float(frame);
-                float y = float(pixelY) + 5.588238f * float(frame);
-                return fmod(52.9829189f * fmod(0.06711056f * float(x) + 0.00583715f * float(y), 1.0f), 1.0f);
-            }
-
 
             uniform sampler2D _GBuffer1;            //metalness color
             uniform sampler2D _ReflectedColorMap;   //contains reflected uv coordinates
@@ -352,6 +312,7 @@ Shader "Hidden/ssr_shader"
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
+            #include "Common.hlsl"
 
             struct appdata
             {
@@ -391,14 +352,18 @@ Shader "Hidden/ssr_shader"
             float minSmoothness;
             int iteration;
             int reflectSky;
+            Buffer<int2> _DepthPyramidResolutions;
 
             inline float2 getScreenResolution() {
-                return _TargetResolution;
+                uint2 temp = _DepthPyramidResolutions[0];
+                //float2 final = float2(NextPowerOf2(temp.x), NextPowerOf2(temp.y));
+                return temp;
             }
             inline float2 getLevelResolution(int index) {
-                float scale = exp2(index);
-                float2 scaledScreen = getScreenResolution() / scale;
-                return scaledScreen.xy;
+                //float scale = exp2(index);
+                //float2 scaledScreen = getScreenResolution() / scale;
+                uint2 temp = _DepthPyramidResolutions[index];
+                return float2(temp.x, temp.y);// scaledScreen.xy;
             }
             inline float2 scaledUv(float2 uv, int index) {
                 float2 scaledScreen = getLevelResolution(index);
@@ -415,7 +380,7 @@ Shader "Hidden/ssr_shader"
                 //someone find why a pyramid fractal pattern appears when not multiplying by 4
                 //it appears when the screen resolution is not a power of 2
                 //it probably is something to do with how the depth pyramid is made
-                return float2(1.0f / (128.0f * getScreenResolution()));
+                return float2(1.0f / (512.0f * getScreenResolution()));
             }
             inline float2 cell(float2 ray, float2 cell_count) { 
                 return floor(ray.xy * cell_count);
@@ -423,10 +388,6 @@ Shader "Hidden/ssr_shader"
             inline float2 cell_count(float level) {
                 float2 res = getLevelResolution(level);
                 return res;
-            }
-            inline bool floatEqApprox(float a, float b) {
-                const float eps = 0.00001f;
-                return abs(a - b) < eps;
             }
             inline bool crossed_cell_boundary(float2 cell_id_one, float2 cell_id_two) {
                 return !floatEqApprox(cell_id_one.x, cell_id_two.x) || !floatEqApprox(cell_id_one.y, cell_id_two.y);
@@ -480,7 +441,6 @@ Shader "Hidden/ssr_shader"
 
                 // cross to next cell to avoid immediate self-intersection
                 float2 rayCell = cell(ray.xy, cell_count(level));
-
                 ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy);
 
                 [loop]
@@ -510,7 +470,7 @@ Shader "Hidden/ssr_shader"
                         level = min(rootLevel, level + 2.0f);
                     }
                     else if (level == startLevel) {
-                        float minZOffset = (minZ + (1 - p.z) * 0.005);
+                        float minZOffset = (minZ + (1 - p.z) * 0.005 / _RenderScale);
                         isSky = minZ == 1;
 
                         [branch]
@@ -528,18 +488,6 @@ Shader "Hidden/ssr_shader"
                 }
                 hit = level < endLevel ? 1 : 0;
                 return ray;
-            }
-
-            inline float ScreenEdgeMask(float2 clipPos) {
-                float yDif = 1 - abs(clipPos.y);
-                float xDif = 1 - abs(clipPos.x);
-                [flatten]
-                if (yDif < 0 || xDif < 0) {
-                    return 0;
-                }
-                float t1 = smoothstep(0, .2, yDif);
-                float t2 = smoothstep(0, .1, xDif);
-                return saturate(t2 * t1);
             }
 
             float4 frag(v2f i) : SV_Target

@@ -8,21 +8,37 @@ using UnityEngine.Rendering;
 
 namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 {
+    public enum RaytraceModes
+    {
+        LinearTracing = 0,
+        HiZTracing = 1,
+    }
     public struct ScreenSpaceReflectionsSettings
     {
+        /// <summary>
+        /// Only applies when TracingMode is set to LinearTracing. Ray march step length.
+        /// </summary>
         public float StepStrideLength;
+        /// <summary>
+        /// Max steps the SSR will perform.
+        /// </summary>
         public float MaxSteps;
+        /// <summary>
+        /// Only applies when TracingMode is set to LinearTracing. Lowers working resolution.
+        /// </summary>
         public uint Downsample;
+        /// <summary>
+        /// Min smoothness value a material needs in order to show SSR
+        /// </summary>
         public float MinSmoothness;
+        /// <summary>
+        /// Tracing mode for SSR
+        /// </summary>
+        public RaytraceModes TracingMode;
     }
     [ExecuteAlways]
     public class LimSSR : ScriptableRendererFeature
     {
-        public enum RaytraceModes
-        {
-            LinearTracing = 0,
-            HiZTracing = 1,
-        }
         public static ScreenSpaceReflectionsSettings GetSettings()
         {
             return new ScreenSpaceReflectionsSettings()
@@ -31,6 +47,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 MaxSteps = ssrFeatureInstance.Settings.maxSteps,
                 MinSmoothness = ssrFeatureInstance.Settings.minSmoothness,
                 StepStrideLength = ssrFeatureInstance.Settings.stepStrideLength,
+                TracingMode = ssrFeatureInstance.Settings.tracingMode,
             };
         }
         public static bool Enabled { get; set; } = true;
@@ -44,9 +61,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
-                tracingMode = TracingMode
+                tracingMode = screenSpaceReflectionsSettings.TracingMode
             };
         }
+
+        [System.Obsolete("Use SetSettings to set tracing mode")]
         public static RaytraceModes TracingMode
         {
             get { return ssrFeatureInstance.Settings.tracingMode; }
@@ -69,13 +88,9 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             internal float ScreenWidth { get; set; }
             internal float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
 
-            //static RenderTexture tempSource;
-
             public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
             {
                 base.Configure(cmd, cameraTextureDescriptor);
-                //ConfigureInput(ScriptableRenderPassInput.Motion | ScriptableRenderPassInput.Depth | ScriptableRenderPassInput.Color | ScriptableRenderPassInput.Normal);
-
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.DefaultHDR;
                 cameraTextureDescriptor.mipCount = 8;
                 cameraTextureDescriptor.autoGenerateMips = true;
