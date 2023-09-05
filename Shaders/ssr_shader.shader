@@ -254,7 +254,7 @@ Shader "Hidden/ssr_shader"
                     dither = Dither8x8(i.uv.xy * _RenderScale, .5);
                 }
                 else {
-                    dither = IGN(i.uv.x * _ScreenParams.x, i.uv.y * _ScreenParams.y, _Frame);
+                    dither = IGN(i.uv.x * _ScreenParams.x * _RenderScale, i.uv.y * _ScreenParams.y * _RenderScale, _Frame);
                 }
 
                 float ditherSign0 = ((floor(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
