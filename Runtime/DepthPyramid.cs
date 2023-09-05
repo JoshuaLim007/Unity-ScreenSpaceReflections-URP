@@ -177,7 +177,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 #if UNITY_2022_1_OR_NEWER
                     cmd.Blit(finalDepthPyramidID, colorAttachmentHandle, Vector2.one, Vector2.zero, 0, 0);
 #else
-                    cmd.Blit(finalDepthPyramid, colorAttachment, Vector2.one * tempSlices[debug].scale, Vector2.zero, 0, 0);
+                    cmd.Blit(finalDepthPyramidID, colorAttachment, Vector2.one * tempSlices[debug].scale, Vector2.zero, 0, 0);
 #endif
                     context.ExecuteCommandBuffer(cmd);
                     CommandBufferPool.Release(cmd);

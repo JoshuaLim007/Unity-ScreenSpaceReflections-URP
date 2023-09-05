@@ -268,6 +268,9 @@ Shader "Hidden/ssr_shader"
 				normal.xyz = UnpackNormal(normal.xyz);
 
                 float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
+                if (rawDepth == 0) {
+                    return maint;
+                }
                 float3 worldSpacePosition = getWorldPosition(rawDepth, i.uv);
                 float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
                 float fresnal = 1 - dot(viewDir, -normal);
