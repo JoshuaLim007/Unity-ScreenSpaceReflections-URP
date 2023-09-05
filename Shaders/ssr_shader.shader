@@ -289,7 +289,7 @@ Shader "Hidden/ssr_shader"
 
                 float fresnalMask = 1 - saturate(RGB2Lum(specularColor));
                 fresnalMask = lerp(1, fresnalMask, gb1.x);
-                fresnal = lerp(1, pow(fresnal, 5), fresnalMask);
+                fresnal = lerp(1, fresnal * fresnal, fresnalMask);
 
                 specularColor.xyz = lerp(float3(1, 1, 1), specularColor.xyz, lerp(0, 0.6f, gb1.x));
 

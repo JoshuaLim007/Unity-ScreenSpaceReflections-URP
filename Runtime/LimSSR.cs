@@ -91,8 +91,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             int tempPaddedSourceID;
 
             internal SSRSettings Settings { get; set; }
-            float downScaledX;
-            float downScaledY;
 
             internal float RenderScale { get; set; }
 
@@ -116,11 +114,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 {
                     Settings.SSR_Instance.SetInt("_DitherMode", 0);
                 }
-                PaddedScreenWidth = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo(cameraTextureDescriptor.width) : cameraTextureDescriptor.width;
-                PaddedScreenHeight = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo(cameraTextureDescriptor.height) : cameraTextureDescriptor.height;
 
                 ScreenHeight = cameraTextureDescriptor.height;
                 ScreenWidth = cameraTextureDescriptor.width;
+                PaddedScreenWidth = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo((int)ScreenWidth) : ScreenWidth / Scale;
+                PaddedScreenHeight = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo((int)ScreenHeight) : ScreenHeight / Scale;
 
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.DefaultHDR;
                 cameraTextureDescriptor.mipCount = 8;
@@ -129,20 +127,21 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 
                 reflectionMapID = Shader.PropertyToID("_ReflectedColorMap");
 
-                float downScaler = Scale;
-                downScaledX = (PaddedScreenWidth / (float)(downScaler));
-                downScaledY = (PaddedScreenHeight / (float)(downScaler));
-                Vector2 paddedResolution = new Vector2(PaddedScreenWidth, PaddedScreenHeight);
-                Vector2 screenResolution = new Vector2(cameraTextureDescriptor.width, cameraTextureDescriptor.height);
-                PaddedScale = new Vector2(PaddedScreenWidth / cameraTextureDescriptor.width, PaddedScreenHeight / cameraTextureDescriptor.height);
-
-                Debug.Log(paddedResolution + ", " + screenResolution + ", " + PaddedScale);
-
+                Vector2 screenResolution = new Vector2(ScreenWidth, ScreenHeight);
                 Settings.SSR_Instance.SetVector("_ScreenResolution", screenResolution);
-                Settings.SSR_Instance.SetVector("_PaddedResolution", paddedResolution);
-                Settings.SSR_Instance.SetVector("_PaddedScale", PaddedScale);
+                if (IsPadded)
+                {
+                    Vector2 paddedResolution = new Vector2(PaddedScreenWidth, PaddedScreenHeight);
+                    PaddedScale = paddedResolution / screenResolution;
+                    Settings.SSR_Instance.SetVector("_PaddedResolution", paddedResolution);
+                    Settings.SSR_Instance.SetVector("_PaddedScale", PaddedScale);
+                }
+                else
+                {
+                    Settings.SSR_Instance.SetVector("_PaddedScale", Vector2.one);
+                }
 
-                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(downScaledX), Mathf.CeilToInt(downScaledY), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
+                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(PaddedScreenWidth), Mathf.CeilToInt(PaddedScreenHeight), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
 
                 tempRenderID = Shader.PropertyToID("_TempTex");
                 cmd.GetTemporaryRT(tempRenderID, cameraTextureDescriptor, FilterMode.Trilinear);

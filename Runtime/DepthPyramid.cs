@@ -21,7 +21,8 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             internal struct TargetSlice
             {
                 internal int slice;
-                internal Vector2Int resolution;
+                internal Vector2Int paddedResolution;
+                internal Vector2Int actualResolution;
                 internal Vector2 scale;
                 public static implicit operator int(TargetSlice target)
                 {
@@ -49,20 +50,28 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
             {
                 //depthSliceResolutions = new ComputeBuffer(buffersize, sizeof(int) * 2, ComputeBufferType.Default);
-                int width = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.width);
-                int height = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.height);
-                screenSize.x = width;
-                screenSize.y = height;
+                int paddedWidth = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.width);
+                int paddedHeight = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.height);
+
+                int width = renderingData.cameraData.cameraTargetDescriptor.width;
+                int height = renderingData.cameraData.cameraTargetDescriptor.height;
+
+                screenSize.x = paddedWidth;
+                screenSize.y = paddedHeight;
 
                 for (int i = 0; i < mBUFFERSIZE; i++)
                 {
-                    tempSlices[i].resolution.x = Mathf.Max(width >> i, 1);
-                    tempSlices[i].resolution.y = Mathf.Max(height >> i, 1);
+                    tempSlices[i].paddedResolution.x = Mathf.Max(paddedWidth >> i, 1);
+                    tempSlices[i].paddedResolution.y = Mathf.Max(paddedHeight >> i, 1);
+
+                    tempSlices[i].actualResolution.x = Mathf.CeilToInt(width / (i + 1));
+                    tempSlices[i].actualResolution.y = Mathf.CeilToInt(height / (i + 1));
+
                     tempSlices[i].slice = i;
 
-                    tempSlices[i].scale.x = tempSlices[i].resolution.x / (float)width;
-                    tempSlices[i].scale.y = tempSlices[i].resolution.y / (float)height;
-                    sliceResolutions[i] = tempSlices[i].resolution;
+                    tempSlices[i].scale.x = tempSlices[i].paddedResolution.x / (float)paddedWidth;
+                    tempSlices[i].scale.y = tempSlices[i].paddedResolution.y / (float)paddedHeight;
+                    sliceResolutions[i] = tempSlices[i].paddedResolution;
 
                     //tempScale[i] = tempSlices[i].scale;
                     //Debug.Log(tempSlices[i].resolution + "_x" + tempSlices[i].scale);
@@ -86,11 +95,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 cmd.SetComputeIntParam(settings.shader, "sSlice", sSlice);
                 cmd.SetComputeIntParam(settings.shader, "dSlice", dSlice);
 
-                bool extraX = !Mathf.IsPowerOfTwo(dW);
-                bool extraY = !Mathf.IsPowerOfTwo(dH);
+                //bool extraX = !Mathf.IsPowerOfTwo(dW);
+                //bool extraY = !Mathf.IsPowerOfTwo(dH);
 
-                cmd.SetComputeIntParam(settings.shader, "extraSampleX", extraX ? 1 : 0);
-                cmd.SetComputeIntParam(settings.shader, "extraSampleY", extraY ? 1 : 0);
+                //cmd.SetComputeIntParam(settings.shader, "extraSampleX", extraX ? 1 : 0);
+                //cmd.SetComputeIntParam(settings.shader, "extraSampleY", extraY ? 1 : 0);
 
             }
             void SetDebugComputeShader(CommandBuffer cmd, RenderTargetIdentifier source, int slice, float low, float high)
@@ -113,13 +122,16 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 
                 float actualWidth = renderingData.cameraData.cameraTargetDescriptor.width;
                 float actualHeight = renderingData.cameraData.cameraTargetDescriptor.height;
-
+                if(settings.shader == null)
+                {
+                    return;
+                }
                 {
                     var cmd = CommandBufferPool.Get("Init Depth Pyramid");
                     cmd.GetTemporaryRTArray(finalDepthPyramidID, (int)width, (int)height, mBUFFERSIZE, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
                     cmd.SetComputeTextureParam(settings.shader, 1, "source", finalDepthPyramidID);
                     cmd.SetComputeVectorParam(settings.shader, "screenSize", new Vector2(actualWidth, actualHeight));
-                    cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(width / mTHREADS), Mathf.CeilToInt(height / mTHREADS), 1);
+                    cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(actualWidth / mTHREADS), Mathf.CeilToInt(actualHeight / mTHREADS), 1);
                     context.ExecuteCommandBuffer(cmd);
                     CommandBufferPool.Release(cmd);
                 }
@@ -134,14 +146,14 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                             finalDepthPyramidID,
                             tempSlices[i],
                             tempSlices[i + 1],
-                            tempSlices[i].resolution.x,
-                            tempSlices[i].resolution.y,
-                            tempSlices[i + 1].resolution.x,
-                            tempSlices[i + 1].resolution.y
+                            tempSlices[i].paddedResolution.x,
+                            tempSlices[i].paddedResolution.y,
+                            tempSlices[i + 1].paddedResolution.x,
+                            tempSlices[i + 1].paddedResolution.y
                             );
 
-                        int xGroup = Mathf.CeilToInt((float)tempSlices[i + 1].resolution.x / mTHREADS);
-                        int yGroup = Mathf.CeilToInt((float)tempSlices[i + 1].resolution.y / mTHREADS);
+                        int xGroup = Mathf.CeilToInt((float)tempSlices[i + 1].actualResolution.x / mTHREADS);
+                        int yGroup = Mathf.CeilToInt((float)tempSlices[i + 1].actualResolution.y / mTHREADS);
                         cmd.DispatchCompute(settings.shader, 0, xGroup, yGroup, 1);
                     }
                     context.ExecuteCommandBufferAsync(cmd, ComputeQueueType.Background);
@@ -192,7 +204,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 
 
         [SerializeField] internal ComputeShader depthPyramidShader;
-        [SerializeField] Settings settings = new Settings();
+        Settings settings = new Settings();
         DepthPyramidPass m_ScriptablePass = null;
         ComputeBuffer depthSliceBuffer = null;
         void ReleaseSliceBuffer()

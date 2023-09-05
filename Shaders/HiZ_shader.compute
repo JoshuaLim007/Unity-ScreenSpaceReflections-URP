@@ -14,8 +14,8 @@ uint2 dSize;
 uint2 screenSize;
 uint sSlice;
 uint dSlice;
-bool extraSampleX;
-bool extraSampleY;
+//bool extraSampleX;
+//bool extraSampleY;
 
 RWTexture2DArray<float> source;
 Texture2D<float> _CameraDepthTexture;
@@ -25,8 +25,8 @@ inline float SampleDepth(uint3 pos) {
 
 [numthreads(THREADS, THREADS, 1)]
 void DepthCopy(uint3 id : SV_DispatchThreadID) {
+    [branch]
     if (id.x >= screenSize.x || id.y >= screenSize.y) {
-        source[uint3(id.xy, 0)] = 0;
         return;
     }
     source[uint3(id.xy, 0)] = 1 - _CameraDepthTexture[id.xy];
@@ -34,6 +34,10 @@ void DepthCopy(uint3 id : SV_DispatchThreadID) {
 [numthreads(THREADS, THREADS, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
+    [branch]
+    if (id.x >= screenSize.x || id.y >= screenSize.y) {
+        return;
+    }
     float minValue = -1;
     float2 prevPos = id.xy << 1;
     uint3 prevId = uint3(prevPos.xy, sSlice);
