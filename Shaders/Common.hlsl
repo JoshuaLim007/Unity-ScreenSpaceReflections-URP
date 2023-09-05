@@ -26,17 +26,7 @@ inline float ScreenEdgeMask(float2 clipPos) {
     return saturate(t2 * t1);
 }
 
-const float dither[64] =
-{
-    0, 32, 8, 40, 2, 34, 10, 42,
-    48, 16, 56, 24, 50, 18, 58, 26,
-    12, 44, 4, 36, 14, 46, 6, 38,
-    60, 28, 52, 20, 62, 30, 54, 22,
-    3, 35, 11, 43, 1, 33, 9, 41,
-    51, 19, 59, 27, 49, 17, 57, 25,
-    15, 47, 7, 39, 13, 45, 5, 37,
-    63, 31, 55, 23, 61, 29, 53, 21
-};
+
 float3 getWorldPosition(float rawDepth, float2 uv) {
     float4 clipSpace = float4(uv * 2 - 1, rawDepth, 1);
     clipSpace.y *= -1;
@@ -49,8 +39,20 @@ inline float RGB2Lum(float3 rgb) {
     return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b);
 }
 //dither noise
-inline float Dither8x8(float2 ScreenPosition, float c0)
+float Dither8x8(float2 ScreenPosition, float c0)
 {
+    const float dither[64] =
+    {
+        0, 32, 8, 40, 2, 34, 10, 42,
+        48, 16, 56, 24, 50, 18, 58, 26,
+        12, 44, 4, 36, 14, 46, 6, 38,
+        60, 28, 52, 20, 62, 30, 54, 22,
+        3, 35, 11, 43, 1, 33, 9, 41,
+        51, 19, 59, 27, 49, 17, 57, 25,
+        15, 47, 7, 39, 13, 45, 5, 37,
+        63, 31, 55, 23, 61, 29, 53, 21
+    };
+
     c0 *= 2;
     float2 uv = ScreenPosition.xy * _ScreenParams.xy;
 
