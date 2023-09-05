@@ -228,6 +228,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             ReleaseSliceBuffer();
             CreateSliceBuffer();
             m_ScriptablePass = new DepthPyramidPass(depthSliceBuffer, settings);
+            settings.shader = depthPyramidShader;
             // Configures where the render pass should be injected.
             m_ScriptablePass.renderPassEvent = RenderPassEvent.AfterRenderingGbuffer;
             if (settings.ShowDebug)
