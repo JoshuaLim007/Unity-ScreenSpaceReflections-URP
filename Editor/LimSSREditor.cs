@@ -20,6 +20,7 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
         bool HasInit = false;
         private SerializedProperty m_TracingMode;
         private SerializedProperty m_ReflectSky;
+        private SerializedProperty m_DitherType;
 
         private struct Styles
         {
@@ -30,6 +31,7 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
             public static GUIContent MaxSteps =         EditorGUIUtility.TrTextContent("Max Steps", "Maximum length of a raycast (IMPACTS PERFORMANCE).");
             public static GUIContent ReflectSky =         EditorGUIUtility.TrTextContent("Reflect Sky", "Considers the sky as part of the reflection.");
             public static GUIContent MinSmoothness =    EditorGUIUtility.TrTextContent("Min Smoothness", "Minimum smoothness value needed for SSR to be applied.");
+            public static GUIContent DitherType =    EditorGUIUtility.TrTextContent("Dither Type", "Dithering Type.");
 
             public static GUIContent NormalQuality = new GUIContent("Normal Quality", "The number of depth texture samples that Unity takes when computing the normals. Low:1 sample, Medium: 5 samples, High: 9 samples.");
         }
@@ -42,6 +44,7 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
             m_MinSmoothness = settings.FindPropertyRelative("minSmoothness");
             m_TracingMode = settings.FindPropertyRelative("tracingMode");
             m_ReflectSky = settings.FindPropertyRelative("reflectSky");
+            m_DitherType = settings.FindPropertyRelative("ditherType");
         }
         bool AssetHasDepthPyramid()
         {
@@ -91,6 +94,7 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
                 m_MaxSteps.floatValue = Mathf.Max(Mathf.Floor(m_MaxSteps.floatValue), 8);
                 EditorGUILayout.PropertyField(m_ReflectSky, Styles.ReflectSky);
             }
+            EditorGUILayout.PropertyField(m_DitherType, Styles.DitherType);
             m_MinSmoothness.floatValue = Mathf.Clamp01(m_MinSmoothness.floatValue);
 
         }

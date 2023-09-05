@@ -14,12 +14,15 @@ Shader "Hidden/ssr_shader"
         //reflected color and mask only
         Pass
         {
+            Name "Linear SSR"
+
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
+            #include "Common.hlsl"
 
             struct appdata
             {
@@ -44,11 +47,6 @@ Shader "Hidden/ssr_shader"
 
             uniform sampler2D _CameraDepthTexture;
 
-            float4x4 _InverseProjectionMatrix;
-            float4x4 _InverseViewMatrix;
-            float4x4 _ProjectionMatrix;
-            float4x4 _ViewMatrix;
-
             uniform sampler2D _MainTex;
             uniform sampler2D _GBuffer2;
 
@@ -60,17 +58,6 @@ Shader "Hidden/ssr_shader"
             int iteration;
             #define binaryStepCount 16
 
-            inline float ScreenEdgeMask(float2 clipPos) {
-                float yDif = 1 - abs(clipPos.y);
-                float xDif = 1 - abs(clipPos.x);
-                [flatten]
-                if (yDif < 0 || xDif < 0) {
-                    return 0;
-                }
-                float t1 = smoothstep(0, .2, yDif);
-                float t2 = smoothstep(0, .1, xDif);
-                return saturate(t2 * t1);
-            }
             float4 frag(v2f i) : SV_Target
             {
                 float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
@@ -151,7 +138,7 @@ Shader "Hidden/ssr_shader"
                             depthDelta = currentPosition.z - LinearEyeDepth(sampledDepth);
 
                             [branch]
-                            if (depthDelta > 0) {
+                            if (depthDelta > 0 && depthDelta < stride * 2) {
                                 currentScreenSpacePosition = uv.xy;
                                 hit = 1;
                                 break;
@@ -213,10 +200,7 @@ Shader "Hidden/ssr_shader"
                 float progress = dot(deltaDir, deltaDir) / (maxDist * maxDist);
                 progress = smoothstep(0, .5, 1 - progress);
 
-                float pf = pow(smoothness, 4);
-                float fresnal = lerp(pf, 1.0, pow(viewReflectDot, 1 / pf));
-                maskOut *= stepS * hit * fresnal;
-
+                maskOut *= hit;
                 return float4(currentScreenSpacePosition, stepS, maskOut * progress);
             }
             ENDCG
@@ -225,12 +209,14 @@ Shader "Hidden/ssr_shader"
         //composite
         Pass
         {
+            Name "SSR Composite"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
+            #include "Common.hlsl"
 
             struct appdata
             {
@@ -253,85 +239,74 @@ Shader "Hidden/ssr_shader"
                 return o;
             }
             float _RenderScale;
-            const float dither[64] =
-            {
-                0, 32, 8, 40, 2, 34, 10, 42,
-                48, 16, 56, 24, 50, 18, 58, 26,
-                12, 44, 4, 36, 14, 46, 6, 38,
-                60, 28, 52, 20, 62, 30, 54, 22,
-                3, 35, 11, 43, 1, 33, 9, 41,
-                51, 19, 59, 27, 49, 17, 57, 25,
-                15, 47, 7, 39, 13, 45, 5, 37,
-                63, 31, 55, 23, 61, 29, 53, 21
-            };
-            //dither noise
-            inline float Dither8x8(float2 ScreenPosition, float c0)
-            {
-                c0 *= 2;
-                float2 uv = ScreenPosition.xy * _ScreenParams.xy;
-
-                uint index = (uint(uv.x) % 8) * 8 + uint(uv.y) % 8;
-
-                float limit = float(dither[index] + 1) / 64.0;
-                return saturate(c0 - limit);
-            }
-            //interleaved gradient noise
-            inline float IGN(int pixelX, int pixelY, int frame)
-            {
-                frame = frame % 64; // need to periodically reset frame to avoid numerical issues
-                float x = float(pixelX) + 5.588238f * float(frame);
-                float y = float(pixelY) + 5.588238f * float(frame);
-                return fmod(52.9829189f * fmod(0.06711056f * float(x) + 0.00583715f * float(y), 1.0f), 1.0f);
-            }
-
 
             uniform sampler2D _GBuffer1;            //metalness color
             uniform sampler2D _ReflectedColorMap;   //contains reflected uv coordinates
             uniform sampler2D _MainTex;             //main screen color
             uniform sampler2D _GBuffer2;            //normals and smoothness
-            float4x4 _InverseProjectionMatrix;
-            float4x4 _InverseViewMatrix;
-            float4x4 _ProjectionMatrix;
-            float4x4 _ViewMatrix;
+            uniform sampler2D _GBuffer0;             //diffuse color
+            uniform sampler2D _CameraDepthTexture;             //diffuse color
 
             float4 frag(v2f i) : SV_Target
             {
-                float dither = Dither8x8(i.uv.xy * _RenderScale, .5);
-                //float dither = IGN(i.uv.x * _ScreenParams.x, i.uv.y * _ScreenParams.y, 0);
+                float dither;
+                if (_DitherMode == 0) {
+                    dither = Dither8x8(i.uv.xy * _RenderScale, .5);
+                }
+                else {
+                    dither = IGN(i.uv.x * _ScreenParams.x, i.uv.y * _ScreenParams.y, _Frame);
+                }
 
                 float ditherSign0 = ((floor(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
                 float ditherSign1 = ((floor(i.uv.x * _RenderScale * _ScreenParams.x)) % 2) * 2 - 1;
                 float ditherSign = ditherSign0 * ditherSign1;
 
-                float4 maint = tex2D(_MainTex, i.uv);
-                float4 reflectedUv = tex2D(_ReflectedColorMap, i.uv);
+                float4 maint = tex2D(_MainTex, i.uv / _PaddedScale);
+                float4 reflectedUv = tex2D(_ReflectedColorMap, i.uv / _PaddedScale);
+
                 float4 normal = tex2D(_GBuffer2, i.uv);
 				normal.xyz = UnpackNormal(normal.xyz);
-                normal = mul(_ViewMatrix, float4(normal.xyz,0));
-                normal = mul(_ProjectionMatrix, float4(normal.xyz,0));
-                normal.y *= -1;
+
+                float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
+                if (rawDepth == 0) {
+                    return maint;
+                }
+                float3 worldSpacePosition = getWorldPosition(rawDepth, i.uv);
+                float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
+                float fresnal = 1 - dot(viewDir, -normal);
 
                 float stepS = reflectedUv.z;
+                float maskVal = saturate(reflectedUv.w) * stepS;
 
-                float maskVal = saturate(reflectedUv.w);
-
+                normal = mul(_ViewMatrix, float4(normal.xyz, 0));
+                normal = mul(_ProjectionMatrix, float4(normal.xyz, 0));
+                normal.y *= -1;
                 reflectedUv += normal * lerp(dither * 0.05f, 0, stepS) * ditherSign;
 
-                float lumin = Luminance(maint);
-                lumin -= 1;
-                lumin = saturate(lumin);
+                float lumin = saturate(RGB2Lum(maint) - 1);
+                float luminMask = 1 - lumin;
+                luminMask = pow(luminMask, 5);
 
                 float2 gb1 = tex2D(_GBuffer1, i.uv.xy).ra;     
+                float4 specularColor = float4(tex2D(_GBuffer0, i.uv.xy).rgb, 1);     
 
-                float fm = clamp(gb1.x, .3, 1);     //smoothness and metalness
-                fm = clamp(fm, 0, 1 - lumin);
+                float fresnalMask = 1 - saturate(RGB2Lum(specularColor));
+                fresnalMask = lerp(1, fresnalMask, gb1.x);
+                fresnal = lerp(1, fresnal * fresnal, fresnalMask);
+
+                specularColor.xyz = lerp(float3(1, 1, 1), specularColor.xyz, lerp(0, 0.6f, gb1.x));
+
+                float fm = clamp(gb1.x, .3, 1);
                 float ff = 1 - fm;
-
-                float4 reflectedTexture = tex2Dlod(_MainTex, float4(reflectedUv.xy,0,lerp(0, 5, 1 - stepS)));
+                float roughnessBlurAmount = lerp(0, 5, 1 - stepS);
+                float4 reflectedTexture = tex2Dlod(_MainTex, float4(reflectedUv.xy, 0, roughnessBlurAmount));
 
                 float ao = gb1.y;
-                float refw = maskVal * ao;
-                float4 res = lerp(maint, maint * ff + reflectedTexture * fm, refw);
+                float refw = maskVal * ao * fresnal * luminMask;
+                
+                float4 reflectedColor = maint * ff + (reflectedTexture * specularColor) * fm;
+
+                float4 res = lerp(maint, reflectedColor, refw);
 
                 return res;
             }
@@ -341,6 +316,7 @@ Shader "Hidden/ssr_shader"
         //reflected color and mask only using hi z tracing
         Pass
         {
+            Name "HiZ SSR"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
@@ -352,6 +328,7 @@ Shader "Hidden/ssr_shader"
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
+            #include "Common.hlsl"
 
             struct appdata
             {
@@ -374,17 +351,10 @@ Shader "Hidden/ssr_shader"
                 return o;
             }
 
-            float4x4 _InverseProjectionMatrix;
-            float4x4 _InverseViewMatrix;
-            float4x4 _ProjectionMatrix;
-            float4x4 _ViewMatrix;
-
             UNITY_DECLARE_TEX2DARRAY(_DepthPyramid);
             uniform sampler2D _GBuffer2;
-            uniform sampler2D _CameraDepthTexture;
             uniform sampler2D _MainTex;
             float4 _MainTex_TexelSize;
-            float2 _TargetResolution;
 
             float3 _WorldSpaceViewDir;
             float _RenderScale;
@@ -392,14 +362,26 @@ Shader "Hidden/ssr_shader"
             float minSmoothness;
             int iteration;
             int reflectSky;
-
+            Buffer<int2> _DepthPyramidResolutions;
+            
+            //converts uv coords of padded texture to uv coords of unpadded texture
+            inline float2 convertUv(float2 uv) {
+                return uv * _PaddedScale;
+            }
+            //converts uv coords of unpadded texture to uv coords of padded texture
+            inline float2 deconvertUv(float2 uv) {
+                return uv / _PaddedScale;
+            }
             inline float2 getScreenResolution() {
-                return _TargetResolution;
+                uint2 temp = _DepthPyramidResolutions[0];
+                //float2 final = float2(NextPowerOf2(temp.x), NextPowerOf2(temp.y));
+                return temp;
             }
             inline float2 getLevelResolution(int index) {
-                float scale = exp2(index);
-                float2 scaledScreen = getScreenResolution() / scale;
-                return scaledScreen.xy;
+                //float scale = exp2(index);
+                //float2 scaledScreen = getScreenResolution() / scale;
+                uint2 temp = _DepthPyramidResolutions[index];
+                return float2(temp.x, temp.y);// scaledScreen.xy;
             }
             inline float2 scaledUv(float2 uv, int index) {
                 float2 scaledScreen = getLevelResolution(index);
@@ -416,7 +398,7 @@ Shader "Hidden/ssr_shader"
                 //someone find why a pyramid fractal pattern appears when not multiplying by 4
                 //it appears when the screen resolution is not a power of 2
                 //it probably is something to do with how the depth pyramid is made
-                return float2(1.0f / (4.0f * getScreenResolution()));
+                return float2(1.0f / (512.0f * getScreenResolution()));
             }
             inline float2 cell(float2 ray, float2 cell_count) { 
                 return floor(ray.xy * cell_count);
@@ -425,14 +407,10 @@ Shader "Hidden/ssr_shader"
                 float2 res = getLevelResolution(level);
                 return res;
             }
-            inline bool floatEqApprox(float a, float b) {
-                const float eps = 0.00001f;
-                return abs(a - b) < eps;
-            }
             inline bool crossed_cell_boundary(float2 cell_id_one, float2 cell_id_two) {
                 return !floatEqApprox(cell_id_one.x, cell_id_two.x) || !floatEqApprox(cell_id_one.y, cell_id_two.y);
             }
-            inline float minimum_depth_plane(float2 ray, float level, float2 cell_count) {
+            inline float minimum_depth_plane(float2 ray, float level) {
 
                 return sampleDepth(ray, level);
             }
@@ -440,7 +418,7 @@ Shader "Hidden/ssr_shader"
             {
                 return o + d * t;
             }
-            inline float3 intersectCellBoundary(float3 o, float3 d, float2 cellIndex, float2 cellCount, float2 crossStep, float2 crossOffset, float iteration)
+            inline float3 intersectCellBoundary(float3 o, float3 d, float2 cellIndex, float2 cellCount, float2 crossStep, float2 crossOffset)
             {
                 float2 cell_size = 1.0 / cellCount;
                 float2 planes = cellIndex / cellCount + cell_size * crossStep;
@@ -450,8 +428,6 @@ Shader "Hidden/ssr_shader"
                 intersection_pos.xy += (solutions.x < solutions.y) ? float2(crossOffset.x, 0.0) : float2(0.0, crossOffset.y);
                 return intersection_pos;
             }
-
-
             inline float3 hiZTrace(float3 p, float3 v, float MaxIterations, out float hit, out float iterations, out bool isSky)
             {
                 const int rootLevel = HIZ_MAX_LEVEL; 
@@ -481,8 +457,7 @@ Shader "Hidden/ssr_shader"
 
                 // cross to next cell to avoid immediate self-intersection
                 float2 rayCell = cell(ray.xy, cell_count(level));
-
-                ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy, 0);
+                ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy);
 
                 [loop]
                 while (level >= endLevel && iterations < MaxIterations)
@@ -492,7 +467,7 @@ Shader "Hidden/ssr_shader"
                     const float2 oldCellIdx = cell(ray.xy, cellCount);
 
                     // get the minimum depth plane in which the current ray resides
-                    float minZ = minimum_depth_plane(ray.xy, level, rootLevel);
+                    float minZ = minimum_depth_plane(ray.xy, level);
 
                     // intersect only if ray depth is below the minimum depth plane
                     float3 tmpRay = ray;
@@ -507,17 +482,18 @@ Shader "Hidden/ssr_shader"
                     if (crossed_cell_boundary(oldCellIdx, newCellIdx))
                     {
                         // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
-                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy, iterations); //// NOTE added .xy to o and d arguments
+                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy); //// NOTE added .xy to o and d arguments
                         level = min(rootLevel, level + 2.0f);
                     }
                     else if (level == startLevel) {
-                        float minZOffset = (minZ + (_ProjectionParams.y * 0.005f) / LinearEyeDepth(1 - p.z));
-
+                        float minZOffset = (minZ + (1 - p.z) * 0.005 / _RenderScale);
                         isSky = minZ == 1;
 
                         [branch]
                         if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
-                            break;
+                            tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy);
+                            level = HIZ_START_LEVEL + 1;
+                            //break;
                         }
                     }
                     // go down a level in the hi-z buffer
@@ -529,62 +505,54 @@ Shader "Hidden/ssr_shader"
                 hit = level < endLevel ? 1 : 0;
                 return ray;
             }
-
-            inline float ScreenEdgeMask(float2 clipPos) {
-                float yDif = 1 - abs(clipPos.y);
-                float xDif = 1 - abs(clipPos.x);
-                [flatten]
-                if (yDif < 0 || xDif < 0) {
-                    return 0;
-                }
-                float t1 = smoothstep(0, .2, yDif);
-                float t2 = smoothstep(0, .1, xDif);
-                return saturate(t2 * t1);
-            }
-
             float4 frag(v2f i) : SV_Target
             {
+                float2 tempUv = convertUv(i.uv);
 
-                float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
+                //since we are working with padded textures, we want avoid working on padded pixels
+                [branch]
+                if (tempUv.x > 1.0f || tempUv.y > 1.0f) {
+                    return float4(0, 0, 0, 0);
+                }
+
+                float rawDepth = 1 - sampleDepth(i.uv, 0);
+                i.uv = convertUv(i.uv);
 
                 [branch]
                 if (rawDepth == 0) {
-                    return float4(i.uv.xy, 0, 0);
+                    return float4(i.uv, 0, 0);
                 }
                 float4 gbuff = tex2D(_GBuffer2, i.uv);
                 float smoothness = gbuff.w;
                 bool doRayMarch = smoothness > minSmoothness;
                 [branch]
                 if (!doRayMarch) {
-                    return float4(i.uv.xy, 0, 0);
+                    return float4(i.uv, 0, 0);
                 }
                 float stepS = smoothstep(minSmoothness, 1, smoothness);
 				float3 normal = UnpackNormal(gbuff.xyz);
-
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
                 clipSpace.y *= -1;
-
                 float4 viewSpacePosition = mul(_InverseProjectionMatrix, clipSpace);
                 viewSpacePosition /= viewSpacePosition.w;
                 float4 worldSpacePosition = mul(_InverseViewMatrix, viewSpacePosition);
                 float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
                 float3 reflectionRay_w = reflect(viewDir, normal);
                 float3 reflectionRay_v = mul(_ViewMatrix, float4(reflectionRay_w,0));
-
-
-                float3 vReflectionEndPosInVS = viewSpacePosition + reflectionRay_v * (viewSpacePosition.z * -1);
+                float3 vReflectionEndPosInVS = viewSpacePosition + reflectionRay_v * -viewSpacePosition.z;
                 float4 vReflectionEndPosInCS = mul(_ProjectionMatrix, float4(vReflectionEndPosInVS.xyz, 1));
                 vReflectionEndPosInCS /= vReflectionEndPosInCS.w;
-
 
                 vReflectionEndPosInCS.z = 1 - (vReflectionEndPosInCS.z);
                 clipSpace.z = 1 - (clipSpace.z);
 
                 float3 outReflDirInTS = normalize((vReflectionEndPosInCS - clipSpace).xyz);
                 outReflDirInTS.xy *= float2(0.5f, -0.5f);
-                float3 outSamplePosInTS = float3(i.uv, clipSpace.z);
 
-                float viewReflectDot = saturate(dot(viewDir, reflectionRay_w));
+                //convert to padded space
+                outReflDirInTS.xy = deconvertUv(outReflDirInTS.xy);
+                float3 outSamplePosInTS = float3(deconvertUv(i.uv), clipSpace.z);
+
                 float ddd = saturate(dot(_WorldSpaceViewDir, reflectionRay_w));
 
                 float hit = 0;
@@ -598,18 +566,19 @@ Shader "Hidden/ssr_shader"
                 float iterations;
                 bool isSky;
                 float3 intersectPoint = hiZTrace(outSamplePosInTS, outReflDirInTS, numSteps, hit, iterations, isSky);
-                float edgeMask = ScreenEdgeMask(intersectPoint.xy * 2 - 1);
+                
+                //convert back to unpadded uv
+                float2 realIntersectUv = convertUv(intersectPoint.xy);
+                float edgeMask = ScreenEdgeMask(realIntersectUv.xy * 2 - 1);
+
                 mask *= hit * edgeMask;
 
                 //remove backface intersections
-				float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, intersectPoint.xy).xyz);
+				float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, realIntersectUv.xy).xyz);
                 float backFaceDot = dot(currentNormal, reflectionRay_w);
                 mask = backFaceDot > 0 && !isSky ? 0 : mask;
 
-                float pf = pow(smoothness, 4);
-                float fresnal = lerp(pf, 1.0, pow(viewReflectDot, 1 / pf));
-
-                return float4(intersectPoint.xy, stepS, mask * stepS * fresnal);
+                return float4(intersectPoint.xy, stepS, mask);
             }
             ENDCG
         }

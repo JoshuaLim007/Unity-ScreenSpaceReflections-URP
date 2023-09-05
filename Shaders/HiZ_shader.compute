@@ -1,42 +1,46 @@
 // Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel CSMain
 #pragma kernel DepthCopy
+#pragma kernel DebugEdit
+#pragma kernel DebugCopyScale
+#pragma kernel DebugApplyBorders
 #include "UnityCG.cginc"
 #define THREADS 8
 
-// Create a RenderTexture with enableRandomWrite flag and set it
-// with cs.SetTexture
 
-
-float sx;
-float sy;
-float dx;
-float dy;
+/////////////////////RUNTIME CODE////////////////////////
+uint2 sSize;
+uint2 dSize;
 uint2 screenSize;
-int sSlice;
-int dSlice;
+uint sSlice;
+uint dSlice;
+//bool extraSampleX;
+//bool extraSampleY;
 
 RWTexture2DArray<float> source;
 Texture2D<float> _CameraDepthTexture;
+inline float SampleDepth(uint3 pos) {
+    return source[uint3(min(pos.xy, float2(sSize.x - 1, sSize.y - 1)), pos.z)];
+}
 
 [numthreads(THREADS, THREADS, 1)]
 void DepthCopy(uint3 id : SV_DispatchThreadID) {
+    [branch]
     if (id.x >= screenSize.x || id.y >= screenSize.y) {
         return;
     }
     source[uint3(id.xy, 0)] = 1 - _CameraDepthTexture[id.xy];
 }
-
-inline float SampleDepth(uint3 pos) {
-    return source[uint3(min(pos.xy, float2(sx-1,sy-1)), pos.z)];
-}
-
 [numthreads(THREADS, THREADS, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
+    [branch]
+    if (id.x >= screenSize.x || id.y >= screenSize.y) {
+        return;
+    }
     float minValue = -1;
-    float2 ratio = float2(screenSize.x / dx, screenSize.y / dy);
-    uint3 prevId = uint3(id.xy << 1, sSlice);
+    float2 prevPos = id.xy << 1;
+    uint3 prevId = uint3(prevPos.xy, sSlice);
 
     uint3 o1 = prevId + uint3(1, 0, 0);
     uint3 o2 = prevId + uint3(1, 1, 0);
@@ -48,11 +52,74 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float d3 = SampleDepth(o3);
     minValue = min(min(d0, d1), min(d2, d3));
 
-    bool needExtraSampleX = ratio.x > 2;
-    bool needExtraSampleY = ratio.y > 2;
-    minValue = needExtraSampleX ? min(minValue, min(SampleDepth(prevId + uint3(2, 0, 0)), SampleDepth(prevId + uint3(2, 1, 0)))) : minValue;
-    minValue = needExtraSampleY ? min(minValue, min(SampleDepth(prevId + uint3(0, 2, 0)), SampleDepth(prevId + uint3(1, 2, 0)))) : minValue;
-    minValue = (needExtraSampleX && needExtraSampleY) ? min(minValue, SampleDepth(prevId + uint3(2, 2, 0)).x) : minValue;
+    //[flatten]
+    //if (extraSampleX) {
+    //    minValue = min(minValue, min(SampleDepth(prevId + uint3(2, 0, 0)), SampleDepth(prevId + uint3(2, 1, 0))));
+    //}
+    //[flatten]
+    //if (extraSampleY) {
+    //    minValue = min(minValue, min(SampleDepth(prevId + uint3(0, 2, 0)), SampleDepth(prevId + uint3(1, 2, 0))));
+    //}
+    //[flatten]
+    //if (extraSampleX && extraSampleY) {
+    //    minValue = min(minValue, SampleDepth(prevId + uint3(2, 2, 0)).x);
+    //}
     
     source[uint3(id.xy, dSlice)] = minValue;
+}
+
+
+
+/////////////////////DEBUGGING CODE////////////////////////
+float low;
+float high;
+[numthreads(THREADS, THREADS, 1)]
+void DebugEdit(uint3 id : SV_DispatchThreadID) {
+    float r = source[uint3(id.xy, dSlice)];
+    r = smoothstep(low, high, r);
+    source[uint3(id.xy, dSlice)] = r;
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void DebugCopyScale(uint3 id : SV_DispatchThreadID) {
+    uint2 o0 = uint2(0, 1);
+    uint2 o1 = uint2(1, 0);
+
+    uint2 pos = id.xy >> dSlice;
+
+    float r = source[uint3(pos, dSlice)];
+
+    float r0 = source[uint3(pos + o1, dSlice)];
+    float r1 = source[uint3(pos - o1, dSlice)];
+    float xDiff = abs(r0 - r1);
+
+    float r2 = source[uint3(pos + o0, dSlice)];
+    float r3 = source[uint3(pos - o0, dSlice)];
+    float yDiff = abs(r2 - r3);
+
+    source[uint3(id.xy, 0)] = r;
+}
+
+[numthreads(THREADS, THREADS, 1)]
+void DebugApplyBorders(uint3 id : SV_DispatchThreadID) {
+    uint2 o0 = uint2(0, 1);
+    uint2 o1 = uint2(1, 0);
+
+    uint2 pos = id.xy;
+
+    float r = source[uint3(pos, 0)];
+
+    float r0 = source[uint3(pos + o1, 0)];
+    float r1 = source[uint3(pos - o1, 0)];
+    float xDiff = abs(r0 - r1);
+
+    float r2 = source[uint3(pos + o0, 0)];
+    float r3 = source[uint3(pos - o0, 0)];
+    float yDiff = abs(r2 - r3);
+
+    float t = 1;
+    if (yDiff > 0 || xDiff > 0) {
+        t = 0;
+    }
+    source[uint3(pos, 0)] = r * t;
 }

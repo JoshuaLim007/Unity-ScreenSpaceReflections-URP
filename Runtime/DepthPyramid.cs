@@ -11,34 +11,36 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 {
     public class DepthPyramid : ScriptableRendererFeature
     {
-        const int buffersize = 11;
+        const int mBUFFERSIZE = 11;
 
         class DepthPyramidPass : ScriptableRenderPass
         {
-            internal Settings settings { get; set; }
-            const int Threads = 8;
-            struct TargetSlice
+            const int mTHREADS = 8;
+
+            internal Settings settings { get; }
+            internal struct TargetSlice
             {
                 internal int slice;
-                internal Vector2 resolution;
+                internal Vector2Int paddedResolution;
+                internal Vector2Int actualResolution;
                 internal Vector2 scale;
                 public static implicit operator int(TargetSlice target)
                 {
                     return target.slice;
                 }
             }
+            public DepthPyramidPass(ComputeBuffer depthSliceBuffer, Settings settings)
+            {
+                depthSliceResolutions = depthSliceBuffer;
+                this.settings = settings;
+            }
 
-            int finalDepthPyramid;
+            int finalDepthPyramidID;
+            TargetSlice[] tempSlices = new TargetSlice[mBUFFERSIZE];
+            Vector2Int[] sliceResolutions = new Vector2Int[mBUFFERSIZE];
+            ComputeBuffer depthSliceResolutions = null;
 
-            TargetSlice[] tempSlices;
-            //float2[] tempScale;
-            //ComputeBuffer sliceScaleBuffer;
-
-
-            //public void Dispose()
-            //{
-            //    sliceScaleBuffer.Release();
-            //}
+            Vector2 screenSize;
 
             // This method is called before executing the render pass.
             // It can be used to configure render targets and their clear state. Also to create temporary render target textures.
@@ -47,96 +49,135 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             // The render pipeline will ensure target setup and clearing happens in a performant manner.
             public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
             {
-                if (tempSlices == null)
-                {
-                    tempSlices = new TargetSlice[buffersize];
-                    //tempScale = new float2[buffersize];
-                    //sliceScaleBuffer = new ComputeBuffer(buffersize, sizeof(float) * 2, ComputeBufferType.Constant, ComputeBufferMode.Dynamic);
-                }
-                float width = renderingData.cameraData.cameraTargetDescriptor.width;
-                float height = renderingData.cameraData.cameraTargetDescriptor.height;
+                //depthSliceResolutions = new ComputeBuffer(buffersize, sizeof(int) * 2, ComputeBufferType.Default);
+                int paddedWidth = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.width);
+                int paddedHeight = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.height);
 
-                for (int i = 0; i < buffersize; i++)
+                int width = renderingData.cameraData.cameraTargetDescriptor.width;
+                int height = renderingData.cameraData.cameraTargetDescriptor.height;
+
+                screenSize.x = paddedWidth;
+                screenSize.y = paddedHeight;
+
+                for (int i = 0; i < mBUFFERSIZE; i++)
                 {
-                    float d = Mathf.Pow(2, i);
-                    tempSlices[i].resolution.x = Mathf.Max((int)width >> i, 1);
-                    tempSlices[i].resolution.y = Mathf.Max((int)height >> i, 1);
+                    tempSlices[i].paddedResolution.x = Mathf.Max(paddedWidth >> i, 1);
+                    tempSlices[i].paddedResolution.y = Mathf.Max(paddedHeight >> i, 1);
+
+                    tempSlices[i].actualResolution.x = Mathf.CeilToInt(width / (i + 1));
+                    tempSlices[i].actualResolution.y = Mathf.CeilToInt(height / (i + 1));
+
                     tempSlices[i].slice = i;
-                    tempSlices[i].scale.x = tempSlices[i].resolution.x / width;
-                    tempSlices[i].scale.y = tempSlices[i].resolution.y / height;
+
+                    tempSlices[i].scale.x = tempSlices[i].paddedResolution.x / (float)paddedWidth;
+                    tempSlices[i].scale.y = tempSlices[i].paddedResolution.y / (float)paddedHeight;
+                    sliceResolutions[i] = tempSlices[i].paddedResolution;
 
                     //tempScale[i] = tempSlices[i].scale;
                     //Debug.Log(tempSlices[i].resolution + "_x" + tempSlices[i].scale);
                     //Debug.Log(tempSlices[i].resolution);
                 }
+                finalDepthPyramidID = Shader.PropertyToID("_DepthPyramid");
+                depthSliceResolutions.SetData(sliceResolutions);
+                Shader.SetGlobalBuffer("_DepthPyramidResolutions", depthSliceResolutions);
 
-                //sliceScaleBuffer.SetData(tempScale);
-                //Shader.SetGlobalConstantBuffer("_DepthPyramidScales", sliceScaleBuffer, 0, tempScale.Length);
 #if UNITY_2022_1_OR_NEWER
                 ConfigureTarget(renderingData.cameraData.renderer.cameraColorTargetHandle, renderingData.cameraData.renderer.cameraColorTargetHandle);
 #else
                 ConfigureTarget(renderingData.cameraData.renderer.cameraColorTarget, renderingData.cameraData.renderer.cameraDepthTarget);
 #endif
             }
-            void SetComputeShader(CommandBuffer cmd, RenderTargetIdentifier tArray, int sSlice, int dSlice, float sW, float sH, float dW, float dH)
+            void SetComputeShader(CommandBuffer cmd, RenderTargetIdentifier tArray, int sSlice, int dSlice, int sW, int sH, int dW, int dH)
             {
                 cmd.SetComputeTextureParam(settings.shader, 0, "source", tArray);
-                cmd.SetComputeFloatParam(settings.shader, "sx", sW);
-                cmd.SetComputeFloatParam(settings.shader, "sy", sH);
-                cmd.SetComputeFloatParam(settings.shader, "dx", dW);
-                cmd.SetComputeFloatParam(settings.shader, "dy", dH);
+                cmd.SetComputeVectorParam(settings.shader, "sSize", new Vector2(sW, sH));
+                cmd.SetComputeVectorParam(settings.shader, "dSize", new Vector2(dW, dH));
                 cmd.SetComputeIntParam(settings.shader, "sSlice", sSlice);
                 cmd.SetComputeIntParam(settings.shader, "dSlice", dSlice);
-            }
 
+                //bool extraX = !Mathf.IsPowerOfTwo(dW);
+                //bool extraY = !Mathf.IsPowerOfTwo(dH);
+
+                //cmd.SetComputeIntParam(settings.shader, "extraSampleX", extraX ? 1 : 0);
+                //cmd.SetComputeIntParam(settings.shader, "extraSampleY", extraY ? 1 : 0);
+
+            }
+            void SetDebugComputeShader(CommandBuffer cmd, RenderTargetIdentifier source, int slice, float low, float high)
+            {
+                cmd.SetComputeTextureParam(settings.shader, 2, "source", source);
+                cmd.SetComputeTextureParam(settings.shader, 3, "source", source);
+                cmd.SetComputeTextureParam(settings.shader, 4, "source", source);
+                cmd.SetComputeFloatParam(settings.shader, "low", low);
+                cmd.SetComputeFloatParam(settings.shader, "high", high);
+                cmd.SetComputeIntParam(settings.shader, "dSlice", slice);
+            }
             // Here you can implement the rendering logic.
             // Use <c>ScriptableRenderContext</c> to issue drawing commands or execute command buffers
             // https://docs.unity3d.com/ScriptReference/Rendering.ScriptableRenderContext.html
             // You don't have to call ScriptableRenderContext.submit, the render pipeline will call it at specific points in the pipeline.
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
-                float width = renderingData.cameraData.cameraTargetDescriptor.width;
-                float height = renderingData.cameraData.cameraTargetDescriptor.height;
-                var cmd = CommandBufferPool.Get("Init Depth Pyramid");
-                finalDepthPyramid = Shader.PropertyToID("_DepthPyramid");
-                cmd.SetComputeVectorParam(settings.shader, "screenSize", new Vector2(width, height));
-                cmd.GetTemporaryRTArray(finalDepthPyramid, (int)width, (int)height, buffersize, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
-                cmd.SetComputeTextureParam(settings.shader, 1, "source", finalDepthPyramid);
-                cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(width / Threads), Mathf.CeilToInt(height / Threads), 1);
-                context.ExecuteCommandBuffer(cmd);
-                CommandBufferPool.Release(cmd);
+                float width = screenSize.x;
+                float height = screenSize.y;
 
-                cmd = CommandBufferPool.Get("Calculate Depth Pyramid");
-                cmd.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
-                for (int i = 0; i < buffersize - 1; i++)
+                float actualWidth = renderingData.cameraData.cameraTargetDescriptor.width;
+                float actualHeight = renderingData.cameraData.cameraTargetDescriptor.height;
+                if(settings.shader == null)
                 {
-                    //calculate high z depth for the next scaled down buffer
-                    SetComputeShader(cmd,
-                        finalDepthPyramid,
-                        tempSlices[i],
-                        tempSlices[i + 1],
-                        tempSlices[i].resolution.x,
-                        tempSlices[i].resolution.y,
-                        tempSlices[i + 1].resolution.x,
-                        tempSlices[i + 1].resolution.y
-                        );
-
-                    int xGroup = Mathf.Max(Mathf.CeilToInt(tempSlices[i + 1].resolution.x / Threads), 1);
-                    int yGroup = Mathf.Max(Mathf.CeilToInt(tempSlices[i + 1].resolution.y / Threads), 1);
-                    cmd.DispatchCompute(settings.shader, 0, xGroup, yGroup, 1);
+                    return;
                 }
-                context.ExecuteCommandBufferAsync(cmd, ComputeQueueType.Background);
-                CommandBufferPool.Release(cmd);
+                {
+                    var cmd = CommandBufferPool.Get("Init Depth Pyramid");
+                    cmd.GetTemporaryRTArray(finalDepthPyramidID, (int)width, (int)height, mBUFFERSIZE, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
+                    cmd.SetComputeTextureParam(settings.shader, 1, "source", finalDepthPyramidID);
+                    cmd.SetComputeVectorParam(settings.shader, "screenSize", new Vector2(actualWidth, actualHeight));
+                    cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(actualWidth / mTHREADS), Mathf.CeilToInt(actualHeight / mTHREADS), 1);
+                    context.ExecuteCommandBuffer(cmd);
+                    CommandBufferPool.Release(cmd);
+                }
+
+                {
+                    var cmd = CommandBufferPool.Get("Calculate Depth Pyramid");
+                    cmd.SetExecutionFlags(CommandBufferExecutionFlags.AsyncCompute);
+                    for (int i = 0; i < mBUFFERSIZE - 1; i++)
+                    {
+                        //calculate high z depth for the next scaled down buffer
+                        SetComputeShader(cmd,
+                            finalDepthPyramidID,
+                            tempSlices[i],
+                            tempSlices[i + 1],
+                            tempSlices[i].paddedResolution.x,
+                            tempSlices[i].paddedResolution.y,
+                            tempSlices[i + 1].paddedResolution.x,
+                            tempSlices[i + 1].paddedResolution.y
+                            );
+
+                        int xGroup = Mathf.CeilToInt((float)tempSlices[i + 1].actualResolution.x / mTHREADS);
+                        int yGroup = Mathf.CeilToInt((float)tempSlices[i + 1].actualResolution.y / mTHREADS);
+                        cmd.DispatchCompute(settings.shader, 0, xGroup, yGroup, 1);
+                    }
+                    context.ExecuteCommandBufferAsync(cmd, ComputeQueueType.Background);
+                    CommandBufferPool.Release(cmd);
+                }
+
 
 #if UNITY_EDITOR
                 if (settings.ShowDebug)
                 {
-                    cmd = CommandBufferPool.Get("Debug Depth Pyramid");
-                    int debug = Mathf.Clamp(settings.DebugSlice, 0, buffersize - 1);
+                    var cmd = CommandBufferPool.Get("Debug Depth Pyramid");
+                    int debug = Mathf.Clamp(settings.DebugSlice, 0, mBUFFERSIZE - 1);
+                    
+                    SetDebugComputeShader(cmd, finalDepthPyramidID, debug, settings.DebugMinMax.x, settings.DebugMinMax.y);
+                    int cx = Mathf.CeilToInt(width / mTHREADS);
+                    int cy = Mathf.CeilToInt(height / mTHREADS);
+                    cmd.DispatchCompute(settings.shader, 2, cx, cy, 1);
+                    cmd.DispatchCompute(settings.shader, 3, cx, cy, 1);
+                    cmd.DispatchCompute(settings.shader, 4, cx, cy, 1);
+
 #if UNITY_2022_1_OR_NEWER
-                    cmd.Blit(finalDepthPyramid, colorAttachmentHandle, Vector2.one * tempSlices[debug].scale, Vector2.zero, debug, 0);
+                    cmd.Blit(finalDepthPyramidID, colorAttachmentHandle, Vector2.one, Vector2.zero, 0, 0);
 #else
-                    cmd.Blit(finalDepthPyramid, colorAttachment, Vector2.one * tempSlices[debug].scale, Vector2.zero, debug, 0);
+                    cmd.Blit(finalDepthPyramidID, colorAttachment, Vector2.one * tempSlices[debug].scale, Vector2.zero, 0, 0);
 #endif
                     context.ExecuteCommandBuffer(cmd);
                     CommandBufferPool.Release(cmd);
@@ -144,9 +185,10 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 #endif
 
             }
-            public override void FrameCleanup(CommandBuffer cmd)
+            public override void OnCameraCleanup(CommandBuffer cmd)
             {
-                cmd.ReleaseTemporaryRT(finalDepthPyramid);
+                base.OnCameraCleanup(cmd);
+                cmd.ReleaseTemporaryRT(finalDepthPyramidID);
             }
         }
 
@@ -155,19 +197,38 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         {
             [HideInInspector] internal ComputeShader shader;
             [SerializeField] internal bool ShowDebug;
-            [Range(0, buffersize - 1)]
+            [Range(0, mBUFFERSIZE - 1)]
             [SerializeField] internal int DebugSlice;
+            [SerializeField] internal Vector2 DebugMinMax;
         }
 
 
         [SerializeField] internal ComputeShader depthPyramidShader;
-        [SerializeField] Settings settings = new Settings();
-        DepthPyramidPass m_ScriptablePass;
-
+        Settings settings = new Settings();
+        DepthPyramidPass m_ScriptablePass = null;
+        ComputeBuffer depthSliceBuffer = null;
+        void ReleaseSliceBuffer()
+        {
+            if (depthSliceBuffer != null)
+            {
+                depthSliceBuffer.Release();
+                depthSliceBuffer = null;
+            }
+        }
+        void CreateSliceBuffer()
+        {
+            if(depthSliceBuffer == null)
+            {
+                depthSliceBuffer = new ComputeBuffer(mBUFFERSIZE, sizeof(int) * 2, ComputeBufferType.Default);
+            }
+        }
         /// <inheritdoc/>
         public override void Create()
         {
-            m_ScriptablePass = new DepthPyramidPass();
+            ReleaseSliceBuffer();
+            CreateSliceBuffer();
+            m_ScriptablePass = new DepthPyramidPass(depthSliceBuffer, settings);
+            settings.shader = depthPyramidShader;
             // Configures where the render pass should be injected.
             m_ScriptablePass.renderPassEvent = RenderPassEvent.AfterRenderingGbuffer;
             if (settings.ShowDebug)
@@ -175,12 +236,20 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 m_ScriptablePass.renderPassEvent = RenderPassEvent.AfterRenderingTransparents;
             }
         }
-        protected override void Dispose(bool disposing)
+        private void OnDestroy()
         {
-            //m_ScriptablePass.Dispose();
-            m_ScriptablePass = null;
+            ReleaseSliceBuffer();
         }
-
+        private void OnDisable()
+        {
+            ReleaseSliceBuffer();
+        }
+        private void OnValidate()
+        {
+            ReleaseSliceBuffer();
+            CreateSliceBuffer();
+            Create();
+        }
         // Here you can inject one or multiple render passes in the renderer.
         // This method is called when setting up the renderer once per-camera.
         public override void AddRenderPasses(ScriptableRenderer renderer, ref RenderingData renderingData)
@@ -190,7 +259,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 return;
             }
             settings.shader = depthPyramidShader;
-            m_ScriptablePass.settings = this.settings;
 #if UNITY_EDITOR && UNITY_2022_1_OR_NEWER
             var d = UnityEngine.Rendering.Universal.UniversalRenderPipelineDebugDisplaySettings.Instance.AreAnySettingsActive;
             if (!d)

@@ -99,7 +99,7 @@ Material:
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _OcclusionMap:
-        m_Texture: {fileID: 2800000, guid: 01911375c3dceb34383524d6b9c85df8, type: 3}
+        m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
     - _ParallaxMap:
@@ -175,7 +175,7 @@ Material:
     - _Glossiness: 0
     - _GlossyReflections: 0
     - _HeightTransition: 0
-    - _Metallic: 1
+    - _Metallic: 0.607
     - _Metallic0: 0
     - _Metallic1: 0
     - _Metallic2: 0
@@ -183,7 +183,7 @@ Material:
     - _Mode: 0
     - _Normal_Strength: 10
     - _NumLayersCount: 1
-    - _OcclusionStrength: 1
+    - _OcclusionStrength: 0
     - _Parallax: 0.005
     - _QueueControl: 0
     - _QueueOffset: 0
@@ -207,11 +207,11 @@ Material:
     - _noise_scale: 75
     - _noise_scale_1: 100
     m_Colors:
-    - _BaseColor: {r: 0.31132078, g: 0.31132078, b: 0.31132078, a: 1}
+    - _BaseColor: {r: 0.20754719, g: 0.20754719, b: 0.20754719, a: 1}
     - _BaseColorAddSubDiff: {r: 0, g: 0, b: 0, a: 0}
     - _CameraFadeParams: {r: 0, g: 0, b: 0, a: 0}
-    - _Color: {r: 0.31132075, g: 0.31132075, b: 0.31132075, a: 1}
-    - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
+    - _Color: {r: 0.20754716, g: 0.20754716, b: 0.20754716, a: 1}
+    - _EmissionColor: {r: 1, g: 1, b: 1, a: 1}
     - _SoftParticleFadeParams: {r: 0, g: 0, b: 0, a: 0}
     - _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     - _color: {r: 0.21698111, g: 0.21698111, b: 0.21698111, a: 1}
