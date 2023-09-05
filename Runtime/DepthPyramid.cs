@@ -49,8 +49,8 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
             {
                 //depthSliceResolutions = new ComputeBuffer(buffersize, sizeof(int) * 2, ComputeBufferType.Default);
-                int width = renderingData.cameraData.cameraTargetDescriptor.width;
-                int height = renderingData.cameraData.cameraTargetDescriptor.height;
+                int width = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.width);
+                int height = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.height);
                 screenSize.x = width;
                 screenSize.y = height;
 
@@ -111,12 +111,14 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 float width = screenSize.x;
                 float height = screenSize.y;
 
+                float actualWidth = renderingData.cameraData.cameraTargetDescriptor.width;
+                float actualHeight = renderingData.cameraData.cameraTargetDescriptor.height;
 
                 {
                     var cmd = CommandBufferPool.Get("Init Depth Pyramid");
                     cmd.GetTemporaryRTArray(finalDepthPyramidID, (int)width, (int)height, mBUFFERSIZE, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear, 1, true);
                     cmd.SetComputeTextureParam(settings.shader, 1, "source", finalDepthPyramidID);
-                    cmd.SetComputeVectorParam(settings.shader, "screenSize", screenSize);
+                    cmd.SetComputeVectorParam(settings.shader, "screenSize", new Vector2(actualWidth, actualHeight));
                     cmd.DispatchCompute(settings.shader, 1, Mathf.CeilToInt(width / mTHREADS), Mathf.CeilToInt(height / mTHREADS), 1);
                     context.ExecuteCommandBuffer(cmd);
                     CommandBufferPool.Release(cmd);

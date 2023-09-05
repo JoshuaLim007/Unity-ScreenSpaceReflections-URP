@@ -26,6 +26,7 @@ inline float SampleDepth(uint3 pos) {
 [numthreads(THREADS, THREADS, 1)]
 void DepthCopy(uint3 id : SV_DispatchThreadID) {
     if (id.x >= screenSize.x || id.y >= screenSize.y) {
+        source[uint3(id.xy, 0)] = 0;
         return;
     }
     source[uint3(id.xy, 0)] = 1 - _CameraDepthTexture[id.xy];

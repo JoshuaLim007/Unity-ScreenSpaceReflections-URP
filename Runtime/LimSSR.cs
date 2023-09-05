@@ -13,6 +13,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         LinearTracing = 0,
         HiZTracing = 1,
     }
+    public enum DitherMode
+    {
+        Dither8x8,
+        InterleavedGradient,
+    }
     public struct ScreenSpaceReflectionsSettings
     {
         /// <summary>
@@ -35,6 +40,10 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         /// Tracing mode for SSR
         /// </summary>
         public RaytraceModes TracingMode;
+        /// <summary>
+        /// Dithering type for SSR
+        /// </summary>
+        public DitherMode DitherMode;
     }
     [ExecuteAlways]
     public class LimSSR : ScriptableRendererFeature
@@ -75,22 +84,44 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         [ExecuteAlways]
         internal class SsrPass : ScriptableRenderPass
         {
+            static int frame = 0;
             public RenderTargetIdentifier Source { get; internal set; }
             int reflectionMapID;
             int tempRenderID;
+            int tempPaddedSourceID;
 
             internal SSRSettings Settings { get; set; }
             float downScaledX;
             float downScaledY;
 
             internal float RenderScale { get; set; }
-            internal float ScreenHeight { get; set; }
-            internal float ScreenWidth { get; set; }
-            internal float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
+
+            private float PaddedScreenHeight;
+            private float PaddedScreenWidth;
+            private float ScreenHeight;
+            private float ScreenWidth;
+            private Vector2 PaddedScale;
+            bool IsPadded => Settings.tracingMode == RaytraceModes.HiZTracing;
+            private float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
 
             public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
             {
                 base.Configure(cmd, cameraTextureDescriptor);
+                Settings.SSR_Instance.SetInt("_Frame", frame);
+                if (Settings.ditherType == DitherMode.InterleavedGradient)
+                {
+                    Settings.SSR_Instance.SetInt("_DitherMode", 1);
+                }
+                else
+                {
+                    Settings.SSR_Instance.SetInt("_DitherMode", 0);
+                }
+                PaddedScreenWidth = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo(cameraTextureDescriptor.width) : cameraTextureDescriptor.width;
+                PaddedScreenHeight = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo(cameraTextureDescriptor.height) : cameraTextureDescriptor.height;
+
+                ScreenHeight = cameraTextureDescriptor.height;
+                ScreenWidth = cameraTextureDescriptor.width;
+
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.DefaultHDR;
                 cameraTextureDescriptor.mipCount = 8;
                 cameraTextureDescriptor.autoGenerateMips = true;
@@ -99,25 +130,43 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 reflectionMapID = Shader.PropertyToID("_ReflectedColorMap");
 
                 float downScaler = Scale;
-                downScaledX = (ScreenWidth / (float)(downScaler));
-                downScaledY = (ScreenHeight / (float)(downScaler));
-                Settings.SSR_Instance.SetVector("_TargetResolution", new Vector4(ScreenWidth, ScreenHeight, 0, 0));
+                downScaledX = (PaddedScreenWidth / (float)(downScaler));
+                downScaledY = (PaddedScreenHeight / (float)(downScaler));
+                Vector2 paddedResolution = new Vector2(PaddedScreenWidth, PaddedScreenHeight);
+                Vector2 screenResolution = new Vector2(cameraTextureDescriptor.width, cameraTextureDescriptor.height);
+                PaddedScale = new Vector2(PaddedScreenWidth / cameraTextureDescriptor.width, PaddedScreenHeight / cameraTextureDescriptor.height);
 
+                Debug.Log(paddedResolution + ", " + screenResolution + ", " + PaddedScale);
+
+                Settings.SSR_Instance.SetVector("_ScreenResolution", screenResolution);
+                Settings.SSR_Instance.SetVector("_PaddedResolution", paddedResolution);
+                Settings.SSR_Instance.SetVector("_PaddedScale", PaddedScale);
 
                 cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(downScaledX), Mathf.CeilToInt(downScaledY), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
 
                 tempRenderID = Shader.PropertyToID("_TempTex");
                 cmd.GetTemporaryRT(tempRenderID, cameraTextureDescriptor, FilterMode.Trilinear);
+
+                if (IsPadded)
+                {
+                    tempPaddedSourceID = Shader.PropertyToID("_TempPaddedSource");
+                    cameraTextureDescriptor.width = (int)PaddedScreenWidth;
+                    cameraTextureDescriptor.height = (int)PaddedScreenHeight;
+                    cmd.GetTemporaryRT(tempPaddedSourceID, cameraTextureDescriptor, FilterMode.Trilinear);
+                }
             }
 
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
                 CommandBuffer commandBuffer = CommandBufferPool.Get("Screen space reflections");
-
+                if (IsPadded)
+                {
+                    commandBuffer.Blit(Source, tempPaddedSourceID, PaddedScale, Vector2.zero);
+                }
                 //calculate reflection
                 if (Settings.tracingMode == RaytraceModes.HiZTracing)
                 {
-                    commandBuffer.Blit(Source, reflectionMapID, Settings.SSR_Instance, 2);
+                    commandBuffer.Blit(tempPaddedSourceID, reflectionMapID, Settings.SSR_Instance, 2);
                 }
                 else
                 {
@@ -125,18 +174,30 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 }
 
                 //compose reflection with main texture
-                commandBuffer.Blit(Source, tempRenderID);
-                commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 1);
-                context.ExecuteCommandBuffer(commandBuffer);
+                if (IsPadded)
+                {
+                    commandBuffer.Blit(tempPaddedSourceID, Source, Settings.SSR_Instance, 1);
+                }
+                else
+                {
+                    commandBuffer.Blit(Source, tempRenderID);
+                    commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 1);
+                }
+                
+                commandBuffer.ReleaseTemporaryRT(tempRenderID);
+                commandBuffer.ReleaseTemporaryRT(reflectionMapID);
+                commandBuffer.ReleaseTemporaryRT(tempPaddedSourceID);
 
+                context.ExecuteCommandBuffer(commandBuffer);
                 CommandBufferPool.Release(commandBuffer);
             }
-            public override void FrameCleanup(CommandBuffer cmd)
+            public override void OnCameraCleanup(CommandBuffer cmd)
             {
                 cmd.ReleaseTemporaryRT(tempRenderID);
                 cmd.ReleaseTemporaryRT(reflectionMapID);
+                cmd.ReleaseTemporaryRT(tempPaddedSourceID);
+                frame++;
             }
-
         }
 
         [System.Serializable]
@@ -148,6 +209,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             public uint downSample = 0;
             public float minSmoothness = 0.5f;
             public bool reflectSky = true;
+            public DitherMode ditherType = DitherMode.InterleavedGradient;
             [HideInInspector] public Material SSR_Instance;
             [HideInInspector] public Shader SSRShader;
         }
@@ -180,8 +242,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             float renderscale = renderingData.cameraData.isSceneViewCamera ? 1 : renderingData.cameraData.renderScale;
 
             renderPass.RenderScale = renderscale;
-            renderPass.ScreenHeight = renderingData.cameraData.cameraTargetDescriptor.height;
-            renderPass.ScreenWidth = renderingData.cameraData.cameraTargetDescriptor.width;
 
             Settings.SSR_Instance.SetFloat("stride", Settings.stepStrideLength);
             Settings.SSR_Instance.SetFloat("numSteps", Settings.maxSteps);
@@ -205,7 +265,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             {
                 return;
             }
-
             if (!GetMaterial())
             {
                 Debug.LogError("Cannot find ssr shader!");

@@ -3,6 +3,17 @@
 
 #pragma multi_compile
 
+float4x4 _InverseProjectionMatrix;
+float4x4 _InverseViewMatrix;
+float4x4 _ProjectionMatrix;
+float4x4 _ViewMatrix;
+
+int _Frame;
+int _DitherMode;
+float2 _ScreenResolution;
+float2 _PaddedResolution;
+float2 _PaddedScale;
+
 inline float ScreenEdgeMask(float2 clipPos) {
     float yDif = 1 - abs(clipPos.y);
     float xDif = 1 - abs(clipPos.x);
@@ -26,7 +37,17 @@ const float dither[64] =
     15, 47, 7, 39, 13, 45, 5, 37,
     63, 31, 55, 23, 61, 29, 53, 21
 };
-
+float3 getWorldPosition(float rawDepth, float2 uv) {
+    float4 clipSpace = float4(uv * 2 - 1, rawDepth, 1);
+    clipSpace.y *= -1;
+    float4 viewSpacePosition = mul(_InverseProjectionMatrix, clipSpace);
+    viewSpacePosition /= viewSpacePosition.w;
+    float4 worldSpacePosition = mul(_InverseViewMatrix, viewSpacePosition);
+    return worldSpacePosition.xyz;
+}
+inline float RGB2Lum(float3 rgb) {
+    return (0.299 * rgb.r + 0.587 * rgb.g + 0.114 * rgb.b);
+}
 //dither noise
 inline float Dither8x8(float2 ScreenPosition, float c0)
 {
