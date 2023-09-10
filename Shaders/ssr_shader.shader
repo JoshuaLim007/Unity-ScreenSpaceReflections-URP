@@ -486,7 +486,7 @@ Shader "Hidden/ssr_shader"
                         level = min(rootLevel, level + 2.0f);
                     }
                     else if (level == startLevel) {
-                        float minZOffset = (minZ + (1 - p.z) * 0.005 / _RenderScale);
+                        float minZOffset = (minZ + (1 - p.z) * 0.005 / _RenderScale * _LimSSRGlobalInvScale);
                         isSky = minZ == 1;
 
                         [branch]

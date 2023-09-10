@@ -75,9 +75,9 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
 
             EditorGUILayout.PropertyField(m_TracingMode, Styles.TracingMode);
             EditorGUILayout.PropertyField(m_MinSmoothness, Styles.MinSmoothness);
+            EditorGUILayout.PropertyField(m_Downsample, Styles.Downsample);
 
             if (m_TracingMode.enumValueIndex == 0) {
-                EditorGUILayout.PropertyField(m_Downsample, Styles.Downsample);
                 EditorGUILayout.PropertyField(m_StepStrideLength, Styles.StepStrideLength);
                 m_StepStrideLength.floatValue = Mathf.Max(m_StepStrideLength.floatValue, .0001f);
                 EditorGUILayout.PropertyField(m_MaxSteps, Styles.MaxSteps);

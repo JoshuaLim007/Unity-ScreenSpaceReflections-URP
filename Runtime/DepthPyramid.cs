@@ -50,11 +50,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             public override void OnCameraSetup(CommandBuffer cmd, ref RenderingData renderingData)
             {
                 //depthSliceResolutions = new ComputeBuffer(buffersize, sizeof(int) * 2, ComputeBufferType.Default);
-                int paddedWidth = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.width);
-                int paddedHeight = Mathf.NextPowerOfTwo(renderingData.cameraData.cameraTargetDescriptor.height);
+                int width = (int)(renderingData.cameraData.cameraTargetDescriptor.width * GlobalLimSSRSettings.GlobalResolutionScale);
+                int height = (int)(renderingData.cameraData.cameraTargetDescriptor.height * GlobalLimSSRSettings.GlobalResolutionScale);
 
-                int width = renderingData.cameraData.cameraTargetDescriptor.width;
-                int height = renderingData.cameraData.cameraTargetDescriptor.height;
+                int paddedWidth = Mathf.NextPowerOfTwo(width);
+                int paddedHeight = Mathf.NextPowerOfTwo(height);
 
                 screenSize.x = paddedWidth;
                 screenSize.y = paddedHeight;
@@ -120,8 +120,8 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 float width = screenSize.x;
                 float height = screenSize.y;
 
-                float actualWidth = renderingData.cameraData.cameraTargetDescriptor.width;
-                float actualHeight = renderingData.cameraData.cameraTargetDescriptor.height;
+                float actualWidth = renderingData.cameraData.cameraTargetDescriptor.width * GlobalLimSSRSettings.GlobalResolutionScale;
+                float actualHeight = renderingData.cameraData.cameraTargetDescriptor.height * GlobalLimSSRSettings.GlobalResolutionScale;
                 if(settings.shader == null)
                 {
                     return;
