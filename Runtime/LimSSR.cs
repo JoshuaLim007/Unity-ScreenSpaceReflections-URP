@@ -161,8 +161,8 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(PaddedScreenWidth), Mathf.CeilToInt(PaddedScreenHeight), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
 
                 tempPaddedSourceID = Shader.PropertyToID("_TempPaddedSource");
-                int tx = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)ScreenWidth) : ScreenWidth);
-                int ty = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)ScreenHeight) : ScreenHeight);
+                int tx = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)cameraTextureDescriptor.width) : cameraTextureDescriptor.width);
+                int ty = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)cameraTextureDescriptor.height) : cameraTextureDescriptor.height);
                 cameraTextureDescriptor.width = tx;
                 cameraTextureDescriptor.height = ty;
                 cmd.GetTemporaryRT(tempPaddedSourceID, cameraTextureDescriptor, FilterMode.Trilinear);
