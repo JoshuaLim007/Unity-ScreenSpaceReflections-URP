@@ -3,16 +3,9 @@
 SSR solution for Unity URP. Supports Linear Tracing and Hi Z tracing. The package includes SSR render feature and Hierarchical Min-Z Depth Buffer render feature. 
 **Created by Joshua Lim**
 
-## **9/4/2023 4.0.0 Changelog**
-
+## **9/10/23 4.1.0 changelog**
 New Features
- - Added Dithering settings (bayer 8x8 noise vs interleaved gradient noise) 
- - SSR can now traverse behind objects (improved thickness checking)
- 
-Bug fixes
- - Fixed non power of 2 resolution artifacts
- - Increased hi-z tracing quality
- - Improved reflection blending to better represent pbr materials
+ - Added downsampling settings for HiZ trace mode, allowing better performance at the cost quality
 
 ## **Support this project**
 
