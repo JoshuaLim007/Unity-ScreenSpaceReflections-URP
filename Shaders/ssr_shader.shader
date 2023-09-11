@@ -462,6 +462,8 @@ Shader "Hidden/ssr_shader"
                 [loop]
                 while (level >= endLevel && iterations < MaxIterations)
                 {
+                    isSky = false;
+
                     // get the cell number of the current ray
                     const float2 cellCount = cell_count(level);
                     const float2 oldCellIdx = cell(ray.xy, cellCount);
@@ -488,12 +490,14 @@ Shader "Hidden/ssr_shader"
                     else if (level == startLevel) {
                         float minZOffset = (minZ + (1 - p.z) * 0.005 / _RenderScale * _LimSSRGlobalInvScale);
                         isSky = minZ == 1;
-
                         [branch]
-                        if (tmpRay.z > minZOffset || (reflectSky == 0 && isSky)) {
+                        if (reflectSky == 0 && isSky) {
+                            break;
+                        }
+                        [flatten]
+                        if (tmpRay.z > minZOffset) {
                             tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy);
                             level = HIZ_START_LEVEL + 1;
-                            //break;
                         }
                     }
                     // go down a level in the hi-z buffer
