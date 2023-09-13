@@ -74,6 +74,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 MinSmoothness = ssrFeatureInstance.Settings.minSmoothness,
                 StepStrideLength = ssrFeatureInstance.Settings.stepStrideLength,
                 TracingMode = ssrFeatureInstance.Settings.tracingMode,
+                DitherMode = ssrFeatureInstance.Settings.ditherType,
             };
         }
         public static bool Enabled { get; set; } = true;
@@ -87,8 +88,10 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
-                tracingMode = screenSpaceReflectionsSettings.TracingMode
+                tracingMode = screenSpaceReflectionsSettings.TracingMode,
+                ditherType = screenSpaceReflectionsSettings.DitherMode,
             };
+            ssrFeatureInstance.renderPass.Settings = ssrFeatureInstance.Settings;
         }
 
         [System.Obsolete("Use SetSettings to set tracing mode")]
