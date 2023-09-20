@@ -337,7 +337,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             ssrFeatureInstance = this;
             renderPass = new SsrPass()
             {
-                renderPassEvent = RenderPassEvent.AfterRenderingTransparents,
+                renderPassEvent = RenderPassEvent.BeforeRenderingTransparents,
                 Settings = this.Settings
             };
             GetMaterial();
