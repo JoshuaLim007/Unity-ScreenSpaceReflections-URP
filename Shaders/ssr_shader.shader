@@ -271,21 +271,25 @@ Shader "Hidden/ssr_shader"
 
                 //Dither calculation
                 float dither;
-                float type = 0;
+                //type 0 = use original mask
+                //type 1 = dither original mask
+                float type;
                 [branch]
                 if (_DitherMode == 0) {
                     dither = Dither8x8(i.uv.xy * _RenderScale, .5);
+                    type = 0;
                 }
                 else {
                     dither = IGN(i.uv.x * _ScreenParams.x * _RenderScale, i.uv.y * _ScreenParams.y * _RenderScale, _Frame);
-                    type = 1;
+                    type = 0;
                 }
                 dither *= 2;
                 dither -= 1;
                 //////////////////////
 
                 //Get dithered UV coords
-                const float2 uvOffset = normal * lerp(dither * 0.05f, 0, stepS);
+                float stepSSqrd = pow(stepS, 2);
+                const float2 uvOffset = normal * lerp(dither * 0.05f, 0, stepSSqrd);
                 float3 reflectedUv = tex2D(_ReflectedColorMap, (i.uv + uvOffset * type) * _PaddedScale);
                 float maskVal = saturate(reflectedUv.z) * stepS;
                 reflectedUv.xy += uvOffset * (1 - type);
@@ -313,22 +317,22 @@ Shader "Hidden/ssr_shader"
                 //values for smoothness blending
                 const float blurL = 0.0f;
                 const float blurH = 5.0f;
-                const float blurPow = 0.25f;
+                const float blurPow = 4;
 
                 //mix colors
                 specularColor.xyz = lerp(float3(1, 1, 1), specularColor.xyz, lerp(lSpecCol, hSpecCol, gb1.x));
 
                 float fm = clamp(gb1.x, lMet, hMet);
                 float ff = 1 - fm;
-                float roughnessBlurAmount = lerp(blurL, blurH, pow(1 - stepS, blurPow));
+                float roughnessBlurAmount = lerp(blurL, blurH, 1 - pow(stepS, blurPow));
                 float4 reflectedTexture = tex2Dlod(_MainTex, float4(reflectedUv.xy, 0, roughnessBlurAmount));
 
                 float ao = gb1.y;
                 float refw = maskVal * ao * fresnal * luminMask;
                 
-                float4 reflectedColor = maint * ff + (reflectedTexture * specularColor) * fm;
+                float4 blendedColor = maint * ff + (reflectedTexture * specularColor) * fm;
 
-                float4 res = lerp(maint, reflectedColor, refw);
+                float4 res = lerp(maint, blendedColor, refw);
 
                 return fixed4(res);
             }
