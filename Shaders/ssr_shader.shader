@@ -58,7 +58,7 @@ Shader "Hidden/ssr_shader"
             int iteration;
             #define binaryStepCount 16
 
-            float4 frag(v2f i) : SV_Target
+            half3 frag(v2f i) : SV_Target
             {
                 float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
                 [branch]
@@ -201,7 +201,7 @@ Shader "Hidden/ssr_shader"
                 progress = smoothstep(0, .5, 1 - progress);
 
                 maskOut *= hit;
-                return float4(currentScreenSpacePosition, stepS, maskOut * progress);
+                return half3(currentScreenSpacePosition, maskOut * progress);
             }
             ENDCG
         }
@@ -239,6 +239,7 @@ Shader "Hidden/ssr_shader"
                 return o;
             }
             float _RenderScale;
+            float minSmoothness;
 
             uniform sampler2D _GBuffer1;            //metalness color
             uniform sampler2D _ReflectedColorMap;   //contains reflected uv coordinates
@@ -247,7 +248,7 @@ Shader "Hidden/ssr_shader"
             uniform sampler2D _GBuffer0;             //diffuse color
             uniform sampler2D _CameraDepthTexture;             //diffuse color
 
-            float4 frag(v2f i) : SV_Target
+            fixed4 frag(v2f i) : SV_Target
             {
                 _PaddedScale = 1 / _PaddedScale;
                 float4 maint = tex2D(_MainTex, i.uv * _PaddedScale);
@@ -260,14 +261,14 @@ Shader "Hidden/ssr_shader"
                 float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
 
                 //Get smoothness value of reflected point
-                float stepS = tex2D(_ReflectedColorMap, i.uv * _PaddedScale).z;
                 
-                //Get screen space normals
-                float3 normal = tex2D(_GBuffer2, i.uv).xyz;
-                normal.xyz = UnpackNormal(normal);
+                //Get screen space normals and smoothness
+                float4 normal = tex2D(_GBuffer2, i.uv);
+                normal.xyz = UnpackNormal(normal.xyz);
+                float stepS = smoothstep(minSmoothness, 1, normal.w);
                 float fresnal = 1 - dot(viewDir, -normal);
-                normal = mul(_ViewMatrix, float4(normal, 0));
-                normal = mul(_ProjectionMatrix, float4(normal, 0));
+                normal.xyz = mul(_ViewMatrix, float4(normal.xyz, 0));
+                normal.xyz = mul(_ProjectionMatrix, float4(normal.xyz, 0));
                 normal.y *= -1;
 
                 //Dither calculation
@@ -285,8 +286,8 @@ Shader "Hidden/ssr_shader"
 
                 //Get dithered UV coords
                 const float2 uvOffset = normal * lerp(dither * 0.05f, 0, stepS);
-                float4 reflectedUv = tex2D(_ReflectedColorMap, (i.uv + uvOffset) * _PaddedScale);
-                float maskVal = saturate(reflectedUv.w) * stepS;
+                float3 reflectedUv = tex2D(_ReflectedColorMap, (i.uv + uvOffset) * _PaddedScale);
+                float maskVal = saturate(reflectedUv.z) * stepS;
 
                 //Get luminance mask for emmissive materials
                 float lumin = saturate(RGB2Lum(maint) - 1);
@@ -328,7 +329,7 @@ Shader "Hidden/ssr_shader"
 
                 float4 res = lerp(maint, reflectedColor, refw);
 
-                return res;
+                return fixed4(res);
             }
             ENDCG
         }
@@ -529,7 +530,7 @@ Shader "Hidden/ssr_shader"
                 hit = level < endLevel ? 1 : 0;
                 return ray;
             }
-            float4 frag(v2f i) : SV_Target
+            half3 frag(v2f i) : SV_Target
             {
                 float2 tempUv = convertUv(i.uv);
 
@@ -553,7 +554,6 @@ Shader "Hidden/ssr_shader"
                 if (!doRayMarch) {
                     return float4(i.uv, 0, 0);
                 }
-                float stepS = smoothstep(minSmoothness, 1, smoothness);
 				float3 normal = UnpackNormal(gbuff.xyz);
                 float4 clipSpace = float4(i.uv * 2 - 1, rawDepth, 1);
                 clipSpace.y *= -1;
@@ -596,13 +596,7 @@ Shader "Hidden/ssr_shader"
                 float edgeMask = ScreenEdgeMask(realIntersectUv.xy * 2 - 1);
 
                 mask *= hit * edgeMask;
-
-                //remove backface intersections
-				float3 currentNormal = UnpackNormal(tex2D(_GBuffer2, realIntersectUv.xy).xyz);
-                float backFaceDot = dot(currentNormal, reflectionRay_w);
-                mask = backFaceDot > 0 && !isSky ? 0 : mask;
-
-                return float4(intersectPoint.xy, stepS, mask);
+                return half3(intersectPoint.xy, mask);
             }
             ENDCG
         }

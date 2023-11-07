@@ -161,7 +161,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                     Settings.SSR_Instance.SetVector("_PaddedScale", Vector2.one);
                 }
 
-                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(PaddedScreenWidth), Mathf.CeilToInt(PaddedScreenHeight), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
+                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(PaddedScreenWidth), Mathf.CeilToInt(PaddedScreenHeight), 0, FilterMode.Bilinear, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Default, 1, false);
 
                 tempPaddedSourceID = Shader.PropertyToID("_TempPaddedSource");
                 int tx = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)cameraTextureDescriptor.width) : cameraTextureDescriptor.width);
