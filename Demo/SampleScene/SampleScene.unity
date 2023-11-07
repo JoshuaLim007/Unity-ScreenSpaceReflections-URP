@@ -35,10 +35,10 @@ RenderSettings:
   m_DefaultReflectionMode: 0
   m_DefaultReflectionResolution: 128
   m_ReflectionBounces: 1
-  m_ReflectionIntensity: 1
+  m_ReflectionIntensity: 0
   m_CustomReflection: {fileID: 0}
   m_Sun: {fileID: 705507994}
-  m_IndirectSpecularColor: {r: 0.11019222, g: 0.1379987, b: 0.17629024, a: 1}
+  m_IndirectSpecularColor: {r: 0, g: 0, b: 0, a: 0}
   m_UseRadianceAmbientProbe: 0
 --- !u!157 &3
 LightmapSettings:
@@ -587,8 +587,8 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 963194225}
-  m_LocalRotation: {x: 0.03241679, y: -0.1066176, z: 0.00065413874, w: 0.9937714}
-  m_LocalPosition: {x: 5.4479637, y: 1.8968873, z: -11.073566}
+  m_LocalRotation: {x: 0.050126713, y: 0.2987303, z: 0.01949739, w: -0.9528208}
+  m_LocalPosition: {x: 5.103509, y: 0.6559259, z: -6.5701528}
   m_LocalScale: {x: 0.25, y: 0.25, z: 0.25}
   m_ConstrainProportionsScale: 1
   m_Children: []
@@ -619,7 +619,7 @@ MonoBehaviour:
   m_VolumeTrigger: {fileID: 0}
   m_VolumeFrameworkUpdateModeOption: 2
   m_RenderPostProcessing: 1
-  m_Antialiasing: 0
+  m_Antialiasing: 3
   m_AntialiasingQuality: 2
   m_StopNaN: 0
   m_Dithering: 1
@@ -650,7 +650,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 21aa50131bc134f04a14efdbeb7686be, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  m_PipelineAsset: {fileID: 11400000, guid: a666a513db404ce459a8fef56bf1a89b, type: 2}
 --- !u!1 &1140480757
 GameObject:
   m_ObjectHideFlags: 0
