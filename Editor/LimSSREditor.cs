@@ -31,7 +31,7 @@ namespace LimWorksEditor.Rendering.ScreenSpaceReflections
             public static GUIContent MaxSteps =         EditorGUIUtility.TrTextContent("Max Steps", "Maximum length of a raycast (IMPACTS PERFORMANCE).");
             public static GUIContent ReflectSky =         EditorGUIUtility.TrTextContent("Reflect Sky", "Considers the sky as part of the reflection.");
             public static GUIContent MinSmoothness =    EditorGUIUtility.TrTextContent("Min Smoothness", "Minimum smoothness value needed for SSR to be applied.");
-            public static GUIContent DitherType =    EditorGUIUtility.TrTextContent("Dither Type", "Dithering Type.");
+            public static GUIContent DitherType =    EditorGUIUtility.TrTextContent("Dither Type", "Dithering Type. Interleaved Gradient for TAA. 8x8 for everything else.");
 
             public static GUIContent NormalQuality = new GUIContent("Normal Quality", "The number of depth texture samples that Unity takes when computing the normals. Low:1 sample, Medium: 5 samples, High: 9 samples.");
         }

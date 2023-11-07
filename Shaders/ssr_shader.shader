@@ -271,12 +271,14 @@ Shader "Hidden/ssr_shader"
 
                 //Dither calculation
                 float dither;
+                float type = 0;
                 [branch]
                 if (_DitherMode == 0) {
                     dither = Dither8x8(i.uv.xy * _RenderScale, .5);
                 }
                 else {
                     dither = IGN(i.uv.x * _ScreenParams.x * _RenderScale, i.uv.y * _ScreenParams.y * _RenderScale, _Frame);
+                    type = 1;
                 }
                 dither *= 2;
                 dither -= 1;
@@ -284,8 +286,9 @@ Shader "Hidden/ssr_shader"
 
                 //Get dithered UV coords
                 const float2 uvOffset = normal * lerp(dither * 0.05f, 0, stepS);
-                float3 reflectedUv = tex2D(_ReflectedColorMap, (i.uv + uvOffset) * _PaddedScale);
+                float3 reflectedUv = tex2D(_ReflectedColorMap, (i.uv + uvOffset * type) * _PaddedScale);
                 float maskVal = saturate(reflectedUv.z) * stepS;
+                reflectedUv.xy += uvOffset * (1 - type);
 
                 //Get luminance mask for emmissive materials
                 float lumin = saturate(RGB2Lum(maint) - 1);
