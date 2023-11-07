@@ -249,56 +249,76 @@ Shader "Hidden/ssr_shader"
 
             float4 frag(v2f i) : SV_Target
             {
+                _PaddedScale = 1 / _PaddedScale;
+                float4 maint = tex2D(_MainTex, i.uv * _PaddedScale);
+                float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
+                [branch]
+                if (rawDepth == 0) {
+                    return maint;
+                }
+                float3 worldSpacePosition = getWorldPosition(rawDepth, i.uv);
+                float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
+
+                //Get smoothness value of reflected point
+                float stepS = tex2D(_ReflectedColorMap, i.uv * _PaddedScale).z;
+                
+                //Get screen space normals
+                float3 normal = tex2D(_GBuffer2, i.uv).xyz;
+                normal.xyz = UnpackNormal(normal);
+                float fresnal = 1 - dot(viewDir, -normal);
+                normal = mul(_ViewMatrix, float4(normal, 0));
+                normal = mul(_ProjectionMatrix, float4(normal, 0));
+                normal.y *= -1;
+
+                //Dither calculation
                 float dither;
+                [branch]
                 if (_DitherMode == 0) {
                     dither = Dither8x8(i.uv.xy * _RenderScale, .5);
                 }
                 else {
                     dither = IGN(i.uv.x * _ScreenParams.x * _RenderScale, i.uv.y * _ScreenParams.y * _RenderScale, _Frame);
                 }
+                dither *= 2;
+                dither -= 1;
+                //////////////////////
 
-                float ditherSign0 = ((floor(i.uv.y * _RenderScale * _ScreenParams.y)) % 2) * 2 - 1;
-                float ditherSign1 = ((floor(i.uv.x * _RenderScale * _ScreenParams.x)) % 2) * 2 - 1;
-                float ditherSign = ditherSign0 * ditherSign1;
-
-                float4 maint = tex2D(_MainTex, i.uv / _PaddedScale);
-                float4 reflectedUv = tex2D(_ReflectedColorMap, i.uv / _PaddedScale);
-
-                float4 normal = tex2D(_GBuffer2, i.uv);
-				normal.xyz = UnpackNormal(normal.xyz);
-
-                float rawDepth = tex2D(_CameraDepthTexture, i.uv).r;
-                if (rawDepth == 0) {
-                    return maint;
-                }
-                float3 worldSpacePosition = getWorldPosition(rawDepth, i.uv);
-                float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
-                float fresnal = 1 - dot(viewDir, -normal);
-
-                float stepS = reflectedUv.z;
+                //Get dithered UV coords
+                const float2 uvOffset = normal * lerp(dither * 0.05f, 0, stepS);
+                float4 reflectedUv = tex2D(_ReflectedColorMap, (i.uv + uvOffset) * _PaddedScale);
                 float maskVal = saturate(reflectedUv.w) * stepS;
 
-                normal = mul(_ViewMatrix, float4(normal.xyz, 0));
-                normal = mul(_ProjectionMatrix, float4(normal.xyz, 0));
-                normal.y *= -1;
-                reflectedUv += normal * lerp(dither * 0.05f, 0, stepS) * ditherSign;
-
+                //Get luminance mask for emmissive materials
                 float lumin = saturate(RGB2Lum(maint) - 1);
                 float luminMask = 1 - lumin;
                 luminMask = pow(luminMask, 5);
 
+                //get metal and ao and spec color
                 float2 gb1 = tex2D(_GBuffer1, i.uv.xy).ra;     
                 float4 specularColor = float4(tex2D(_GBuffer0, i.uv.xy).rgb, 1);     
 
+                //calculate fresnal
                 float fresnalMask = 1 - saturate(RGB2Lum(specularColor));
                 fresnalMask = lerp(1, fresnalMask, gb1.x);
                 fresnal = lerp(1, fresnal * fresnal, fresnalMask);
 
-                specularColor.xyz = lerp(float3(1, 1, 1), specularColor.xyz, lerp(0, 0.6f, gb1.x));
+                //values for metallic blending
+                const float lMet = 0.3f;
+                const float hMet = 1.0f;
+                const float lSpecCol = 0.0;
+                const float hSpecCol = 0.6f;
 
-                float fm = clamp(gb1.x, .3, 1);
+                //values for smoothness blending
+                const float blurL = 0.0f;
+                const float blurH = 5.0f;
+                const float blurPow = 0.25f;
+
+                //mix colors
+                specularColor.xyz = lerp(float3(1, 1, 1), specularColor.xyz, lerp(lSpecCol, hSpecCol, gb1.x));
+
+                float fm = clamp(gb1.x, lMet, hMet);
                 float ff = 1 - fm;
-                float roughnessBlurAmount = lerp(0, 5, 1 - stepS);
+                float roughnessBlurAmount = lerp(blurL, blurH, pow(1 - stepS, blurPow));
                 float4 reflectedTexture = tex2Dlod(_MainTex, float4(reflectedUv.xy, 0, roughnessBlurAmount));
 
                 float ao = gb1.y;
