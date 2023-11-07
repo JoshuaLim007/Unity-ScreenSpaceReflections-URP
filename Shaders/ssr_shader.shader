@@ -260,8 +260,6 @@ Shader "Hidden/ssr_shader"
                 float3 worldSpacePosition = getWorldPosition(rawDepth, i.uv);
                 float3 viewDir = normalize(float3(worldSpacePosition.xyz) - _WorldSpaceCameraPos);
 
-                //Get smoothness value of reflected point
-                
                 //Get screen space normals and smoothness
                 float4 normal = tex2D(_GBuffer2, i.uv);
                 normal.xyz = UnpackNormal(normal.xyz);
