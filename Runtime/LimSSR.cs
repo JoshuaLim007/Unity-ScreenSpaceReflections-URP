@@ -13,10 +13,14 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         const string GlobalScaleShaderString = "_LimSSRGlobalScale";
         const string GlobalInverseScaleShaderString = "_LimSSRGlobalInvScale";
         private static float mGlobalScale = 1.0f;
+
+        /// <summary>
+        /// Value represents the resolution scale for both the depth pyramid and ssr pass. Value is set via ScreenSpaceReflectionsSettings.
+        /// </summary>
         public static float GlobalResolutionScale { 
             get {
                 return mGlobalScale;
-            } set {
+            } internal set {
                 value = Mathf.Clamp(value, 0.1f, 2.0f);
                 mGlobalScale = value;
                 Shader.SetGlobalFloat(GlobalScaleShaderString, mGlobalScale);
@@ -46,7 +50,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         /// </summary>
         public float MaxSteps;
         /// <summary>
-        /// Only applies when TracingMode is set to LinearTracing. Lowers working resolution.
+        /// Sets working resolution, 0 = current rendering resolution, 1 = half of current rendering resolution
         /// </summary>
         public uint Downsample;
         /// <summary>
@@ -61,6 +65,25 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         /// Dithering type for SSR
         /// </summary>
         public DitherMode DitherMode;
+
+        public static ScreenSpaceReflectionsSettings HiZDefault => new()
+        {
+            MaxSteps = 128,
+            StepStrideLength = .03f,
+            Downsample = 1,
+            MinSmoothness = 0.25f,
+            TracingMode = RaytraceModes.HiZTracing,
+            DitherMode = DitherMode.InterleavedGradient
+        };
+        public static ScreenSpaceReflectionsSettings LinearDefault => new()
+        {
+            MaxSteps = 128,
+            StepStrideLength = .03f,
+            Downsample = 1,
+            MinSmoothness = 0.25f,
+            TracingMode = RaytraceModes.LinearTracing,
+            DitherMode = DitherMode.InterleavedGradient
+        };
     }
     [ExecuteAlways]
     public class LimSSR : ScriptableRendererFeature
@@ -84,7 +107,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             {
                 stepStrideLength = Mathf.Clamp(screenSpaceReflectionsSettings.StepStrideLength, 0.001f, float.MaxValue),
                 maxSteps = Mathf.Max(screenSpaceReflectionsSettings.MaxSteps, 8),
-                downSample = (uint)Mathf.Clamp(screenSpaceReflectionsSettings.Downsample, 0, 2),
+                downSample = (uint)Mathf.Clamp01(screenSpaceReflectionsSettings.Downsample),
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
