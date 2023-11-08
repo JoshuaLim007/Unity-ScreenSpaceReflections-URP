@@ -8,6 +8,27 @@ using UnityEngine.Rendering;
 
 namespace LimWorks.Rendering.URP.ScreenSpaceReflections
 {
+    public static class GlobalLimSSRSettings
+    {
+        const string GlobalScaleShaderString = "_LimSSRGlobalScale";
+        const string GlobalInverseScaleShaderString = "_LimSSRGlobalInvScale";
+        private static float mGlobalScale = 1.0f;
+
+        /// <summary>
+        /// Value represents the resolution scale for both the depth pyramid and ssr pass. Value is set via ScreenSpaceReflectionsSettings.
+        /// </summary>
+        public static float GlobalResolutionScale { 
+            get {
+                return mGlobalScale;
+            } internal set {
+                value = Mathf.Clamp(value, 0.1f, 2.0f);
+                mGlobalScale = value;
+                Shader.SetGlobalFloat(GlobalScaleShaderString, mGlobalScale);
+                Shader.SetGlobalFloat(GlobalInverseScaleShaderString, 1.0f / mGlobalScale);
+            }
+        }
+
+    }
     public enum RaytraceModes
     {
         LinearTracing = 0,
@@ -29,7 +50,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         /// </summary>
         public float MaxSteps;
         /// <summary>
-        /// Only applies when TracingMode is set to LinearTracing. Lowers working resolution.
+        /// Sets working resolution, 0 = current rendering resolution, 1 = half of current rendering resolution
         /// </summary>
         public uint Downsample;
         /// <summary>
@@ -44,6 +65,25 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
         /// Dithering type for SSR
         /// </summary>
         public DitherMode DitherMode;
+
+        public static ScreenSpaceReflectionsSettings HiZDefault => new()
+        {
+            MaxSteps = 128,
+            StepStrideLength = .03f,
+            Downsample = 1,
+            MinSmoothness = 0.25f,
+            TracingMode = RaytraceModes.HiZTracing,
+            DitherMode = DitherMode.InterleavedGradient
+        };
+        public static ScreenSpaceReflectionsSettings LinearDefault => new()
+        {
+            MaxSteps = 128,
+            StepStrideLength = .03f,
+            Downsample = 1,
+            MinSmoothness = 0.25f,
+            TracingMode = RaytraceModes.LinearTracing,
+            DitherMode = DitherMode.InterleavedGradient
+        };
     }
     [ExecuteAlways]
     public class LimSSR : ScriptableRendererFeature
@@ -57,6 +97,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 MinSmoothness = ssrFeatureInstance.Settings.minSmoothness,
                 StepStrideLength = ssrFeatureInstance.Settings.stepStrideLength,
                 TracingMode = ssrFeatureInstance.Settings.tracingMode,
+                DitherMode = ssrFeatureInstance.Settings.ditherType,
             };
         }
         public static bool Enabled { get; set; } = true;
@@ -66,12 +107,14 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             {
                 stepStrideLength = Mathf.Clamp(screenSpaceReflectionsSettings.StepStrideLength, 0.001f, float.MaxValue),
                 maxSteps = Mathf.Max(screenSpaceReflectionsSettings.MaxSteps, 8),
-                downSample = (uint)Mathf.Clamp(screenSpaceReflectionsSettings.Downsample, 0, 2),
+                downSample = (uint)Mathf.Clamp01(screenSpaceReflectionsSettings.Downsample),
                 minSmoothness = Mathf.Clamp01(screenSpaceReflectionsSettings.MinSmoothness),
                 SSRShader = ssrFeatureInstance.Settings.SSRShader,
                 SSR_Instance = ssrFeatureInstance.Settings.SSR_Instance,
-                tracingMode = screenSpaceReflectionsSettings.TracingMode
+                tracingMode = screenSpaceReflectionsSettings.TracingMode,
+                ditherType = screenSpaceReflectionsSettings.DitherMode,
             };
+            ssrFeatureInstance.renderPass.Settings = ssrFeatureInstance.Settings;
         }
 
         [System.Obsolete("Use SetSettings to set tracing mode")]
@@ -87,7 +130,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             static int frame = 0;
             public RenderTargetIdentifier Source { get; internal set; }
             int reflectionMapID;
-            int tempRenderID;
             int tempPaddedSourceID;
 
             internal SSRSettings Settings { get; set; }
@@ -100,7 +142,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             private float ScreenWidth;
             private Vector2 PaddedScale;
             bool IsPadded => Settings.tracingMode == RaytraceModes.HiZTracing;
-            private float Scale => Settings.tracingMode == RaytraceModes.HiZTracing ? 1 : Settings.downSample + 1;
+            private float Scale => Settings.downSample + 1;
 
             public override void Configure(CommandBuffer cmd, RenderTextureDescriptor cameraTextureDescriptor)
             {
@@ -114,11 +156,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 {
                     Settings.SSR_Instance.SetInt("_DitherMode", 0);
                 }
-
-                ScreenHeight = cameraTextureDescriptor.height;
-                ScreenWidth = cameraTextureDescriptor.width;
-                PaddedScreenWidth = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo((int)ScreenWidth) : ScreenWidth / Scale;
-                PaddedScreenHeight = Settings.tracingMode == RaytraceModes.HiZTracing ? Mathf.NextPowerOfTwo((int)ScreenHeight) : ScreenHeight / Scale;
+                GlobalLimSSRSettings.GlobalResolutionScale = 1.0f / Scale;
+                ScreenHeight = IsPadded ? cameraTextureDescriptor.height * GlobalLimSSRSettings.GlobalResolutionScale : cameraTextureDescriptor.height;
+                ScreenWidth = IsPadded ? cameraTextureDescriptor.width * GlobalLimSSRSettings.GlobalResolutionScale : cameraTextureDescriptor.width;
+                PaddedScreenWidth = IsPadded ? Mathf.NextPowerOfTwo((int)ScreenWidth) : ScreenWidth / Scale;
+                PaddedScreenHeight = IsPadded ? Mathf.NextPowerOfTwo((int)ScreenHeight) : ScreenHeight / Scale;
 
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.DefaultHDR;
                 cameraTextureDescriptor.mipCount = 8;
@@ -138,52 +180,42 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                 }
                 else
                 {
+                    PaddedScale = Vector2.one;
                     Settings.SSR_Instance.SetVector("_PaddedScale", Vector2.one);
                 }
 
-                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(PaddedScreenWidth), Mathf.CeilToInt(PaddedScreenHeight), 0, FilterMode.Point, RenderTextureFormat.DefaultHDR, RenderTextureReadWrite.Default, 1, false);
+                cmd.GetTemporaryRT(reflectionMapID, Mathf.CeilToInt(PaddedScreenWidth), Mathf.CeilToInt(PaddedScreenHeight), 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Default, 1, false);
 
-                tempRenderID = Shader.PropertyToID("_TempTex");
-                cmd.GetTemporaryRT(tempRenderID, cameraTextureDescriptor, FilterMode.Trilinear);
-
-                if (IsPadded)
-                {
-                    tempPaddedSourceID = Shader.PropertyToID("_TempPaddedSource");
-                    cameraTextureDescriptor.width = (int)PaddedScreenWidth;
-                    cameraTextureDescriptor.height = (int)PaddedScreenHeight;
-                    cmd.GetTemporaryRT(tempPaddedSourceID, cameraTextureDescriptor, FilterMode.Trilinear);
-                }
+                tempPaddedSourceID = Shader.PropertyToID("_TempPaddedSource");
+                int tx = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)cameraTextureDescriptor.width) : cameraTextureDescriptor.width);
+                int ty = (int)(IsPadded ? Mathf.NextPowerOfTwo((int)cameraTextureDescriptor.height) : cameraTextureDescriptor.height);
+                cameraTextureDescriptor.width = tx;
+                cameraTextureDescriptor.height = ty;
+                cmd.GetTemporaryRT(tempPaddedSourceID, cameraTextureDescriptor, FilterMode.Trilinear);
             }
 
             public override void Execute(ScriptableRenderContext context, ref RenderingData renderingData)
             {
+                const int hiZPass = 2;
+                const int linearPass = 0;
+                const int compPass = 1;
+
                 CommandBuffer commandBuffer = CommandBufferPool.Get("Screen space reflections");
-                if (IsPadded)
-                {
-                    commandBuffer.Blit(Source, tempPaddedSourceID, PaddedScale, Vector2.zero);
-                }
+                commandBuffer.Blit(Source, tempPaddedSourceID, PaddedScale, Vector2.zero);
+
                 //calculate reflection
                 if (Settings.tracingMode == RaytraceModes.HiZTracing)
                 {
-                    commandBuffer.Blit(tempPaddedSourceID, reflectionMapID, Settings.SSR_Instance, 2);
+                    commandBuffer.Blit(null, reflectionMapID, Settings.SSR_Instance, hiZPass);
                 }
                 else
                 {
-                    commandBuffer.Blit(Source, reflectionMapID, Settings.SSR_Instance, 0);
+                    commandBuffer.Blit(null, reflectionMapID, Settings.SSR_Instance, linearPass);
                 }
 
                 //compose reflection with main texture
-                if (IsPadded)
-                {
-                    commandBuffer.Blit(tempPaddedSourceID, Source, Settings.SSR_Instance, 1);
-                }
-                else
-                {
-                    commandBuffer.Blit(Source, tempRenderID);
-                    commandBuffer.Blit(tempRenderID, Source, Settings.SSR_Instance, 1);
-                }
-                
-                commandBuffer.ReleaseTemporaryRT(tempRenderID);
+                commandBuffer.Blit(tempPaddedSourceID, Source, Settings.SSR_Instance, compPass);
+
                 commandBuffer.ReleaseTemporaryRT(reflectionMapID);
                 commandBuffer.ReleaseTemporaryRT(tempPaddedSourceID);
 
@@ -192,7 +224,6 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             }
             public override void OnCameraCleanup(CommandBuffer cmd)
             {
-                cmd.ReleaseTemporaryRT(tempRenderID);
                 cmd.ReleaseTemporaryRT(reflectionMapID);
                 cmd.ReleaseTemporaryRT(tempPaddedSourceID);
                 frame++;
@@ -205,6 +236,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             public RaytraceModes tracingMode = RaytraceModes.LinearTracing;
             public float stepStrideLength = .03f;
             public float maxSteps = 128;
+            [Range(0,1)]
             public uint downSample = 0;
             public float minSmoothness = 0.5f;
             public bool reflectSky = true;
@@ -328,7 +360,7 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
             ssrFeatureInstance = this;
             renderPass = new SsrPass()
             {
-                renderPassEvent = RenderPassEvent.AfterRenderingTransparents,
+                renderPassEvent = RenderPassEvent.BeforeRenderingTransparents,
                 Settings = this.Settings
             };
             GetMaterial();

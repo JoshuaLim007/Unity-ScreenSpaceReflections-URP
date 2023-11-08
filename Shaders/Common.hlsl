@@ -13,6 +13,8 @@ int _DitherMode;
 float2 _ScreenResolution;
 float2 _PaddedResolution;
 float2 _PaddedScale;
+float _LimSSRGlobalScale;
+float _LimSSRGlobalInvScale;
 
 inline float ScreenEdgeMask(float2 clipPos) {
     float yDif = 1 - abs(clipPos.y);

@@ -5,6 +5,8 @@
 #pragma kernel DebugCopyScale
 #pragma kernel DebugApplyBorders
 #include "UnityCG.cginc"
+#include "Common.hlsl"
+
 #define THREADS 8
 
 
@@ -29,7 +31,7 @@ void DepthCopy(uint3 id : SV_DispatchThreadID) {
     if (id.x >= screenSize.x || id.y >= screenSize.y) {
         return;
     }
-    source[uint3(id.xy, 0)] = 1 - _CameraDepthTexture[id.xy];
+    source[uint3(id.xy, 0)] = 1 - _CameraDepthTexture[id.xy * _LimSSRGlobalInvScale];
 }
 [numthreads(THREADS, THREADS, 1)]
 void CSMain (uint3 id : SV_DispatchThreadID)

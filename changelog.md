@@ -1,5 +1,13 @@
 # Change Log:
 
+## 4.2.0
+New Features
+ - Improved glossy reflections
+
+## 4.1.0
+New Features
+ - Added downsampling settings for HiZ trace mode, allowing better performance at the cost quality
+
 ## 4.0.0
 
 New Features
