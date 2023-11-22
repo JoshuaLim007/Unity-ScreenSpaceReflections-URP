@@ -19,6 +19,7 @@ Shader "Hidden/ssr_shader"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma enable_d3d11_debug_symbols
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
@@ -213,6 +214,7 @@ Shader "Hidden/ssr_shader"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma enable_d3d11_debug_symbols
 
             #include "UnityCG.cginc"
 			#include "NormalSample.hlsl"
@@ -346,6 +348,7 @@ Shader "Hidden/ssr_shader"
             CGPROGRAM
             #pragma vertex vert
             #pragma fragment frag
+            #pragma enable_d3d11_debug_symbols
             #define HIZ_START_LEVEL 0           //normally in good code, you can start and 
                                                 //stop at higher levels to improve performance, 
                                                 //but my code just shits itself, probably due to not making the depth pyramid correctly
@@ -377,7 +380,6 @@ Shader "Hidden/ssr_shader"
                 return o;
             }
 
-            UNITY_DECLARE_TEX2DARRAY(_DepthPyramid);
             uniform sampler2D _GBuffer2;
             uniform sampler2D _MainTex;
             float4 _MainTex_TexelSize;
@@ -388,7 +390,7 @@ Shader "Hidden/ssr_shader"
             float minSmoothness;
             int iteration;
             int reflectSky;
-            Buffer<int2> _DepthPyramidResolutions;
+            float2 crossEpsilon;
             
             //converts uv coords of padded texture to uv coords of unpadded texture
             inline float2 convertUv(float2 uv) {
@@ -398,33 +400,27 @@ Shader "Hidden/ssr_shader"
             inline float2 deconvertUv(float2 uv) {
                 return uv / _PaddedScale;
             }
-            inline float2 getScreenResolution() {
-                uint2 temp = _DepthPyramidResolutions[0];
-                //float2 final = float2(NextPowerOf2(temp.x), NextPowerOf2(temp.y));
-                return temp;
+            inline uint2 getScreenResolution() {
+                return _PaddedResolution;
             }
-            inline float2 getLevelResolution(int index) {
-                //float scale = exp2(index);
-                //float2 scaledScreen = getScreenResolution() / scale;
-                uint2 temp = _DepthPyramidResolutions[index];
-                return float2(temp.x, temp.y);// scaledScreen.xy;
+            inline uint2 getLevelResolution(uint index) {
+                uint2 res = getScreenResolution();
+                res.x = res.x >> index;
+                res.y = res.y >> index;
+                return res;
             }
-            inline float2 scaledUv(float2 uv, int index) {
+            inline float2 scaledUv(float2 uv, uint index) {
                 float2 scaledScreen = getLevelResolution(index);
                 float2 realScale = scaledScreen.xy / getScreenResolution();
                 uv *= realScale;
                 return uv;
             }
-            inline float sampleDepth(float2 uv, int index) {
+            inline float sampleDepth(float2 uv, uint index) {
                 uv = scaledUv(uv, index);
                 return UNITY_SAMPLE_TEX2DARRAY(_DepthPyramid, float3(uv, index));
             }
             inline float2 cross_epsilon() {
-                //multiply by 4 to remove artifacting (magic number)
-                //someone find why a pyramid fractal pattern appears when not multiplying by 4
-                //it appears when the screen resolution is not a power of 2
-                //it probably is something to do with how the depth pyramid is made
-                return float2(1.0f / (512.0f * getScreenResolution()));
+                return crossEpsilon;
             }
             inline float2 cell(float2 ray, float2 cell_count) { 
                 return floor(ray.xy * cell_count);
@@ -454,7 +450,7 @@ Shader "Hidden/ssr_shader"
                 intersection_pos.xy += (solutions.x < solutions.y) ? float2(crossOffset.x, 0.0) : float2(0.0, crossOffset.y);
                 return intersection_pos;
             }
-            inline float3 hiZTrace(float3 p, float3 v, float MaxIterations, out float hit, out float iterations, out bool isSky)
+            inline float3 hiZTrace(float thickness, float3 p, float3 v, float MaxIterations, out float hit, out float iterations, out bool isSky)
             {
                 const int rootLevel = HIZ_MAX_LEVEL; 
                 const int endLevel = HIZ_STOP_LEVEL;
@@ -486,7 +482,11 @@ Shader "Hidden/ssr_shader"
                 ray = intersectCellBoundary(ray, d, rayCell.xy, cell_count(level), crossStep.xy, crossOffset.xy);
 
                 [loop]
-                while (level >= endLevel && iterations < MaxIterations)
+                while (level >= endLevel 
+                    && iterations < MaxIterations 
+                    && ray.x >= 0 && ray.x < 1
+                    && ray.y >= 0 && ray.y < 1
+                    && ray.z > 0)
                 {
                     isSky = false;
 
@@ -510,11 +510,11 @@ Shader "Hidden/ssr_shader"
                     if (crossed_cell_boundary(oldCellIdx, newCellIdx))
                     {
                         // intersect the boundary of that cell instead, and go up a level for taking a larger step next iteration
-                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy); //// NOTE added .xy to o and d arguments
+                        tmpRay = intersectCellBoundary(ray, d, oldCellIdx, cellCount.xy, crossStep.xy, crossOffset.xy); 
                         level = min(rootLevel, level + 2.0f);
                     }
                     else if (level == startLevel) {
-                        float minZOffset = (minZ + (1 - p.z) * 0.005 / _RenderScale * _LimSSRGlobalInvScale);
+                        float minZOffset = (minZ + (1 - p.z) * thickness);
                         isSky = minZ == 1;
                         [branch]
                         if (reflectSky == 0 && isSky) {
@@ -544,9 +544,8 @@ Shader "Hidden/ssr_shader"
                 if (tempUv.x > 1.0f || tempUv.y > 1.0f) {
                     return float4(0, 0, 0, 0);
                 }
-
                 float rawDepth = 1 - sampleDepth(i.uv, 0);
-                i.uv = convertUv(i.uv);
+                i.uv = tempUv;
 
                 [branch]
                 if (rawDepth == 0) {
@@ -571,7 +570,6 @@ Shader "Hidden/ssr_shader"
                 float3 vReflectionEndPosInVS = viewSpacePosition + reflectionRay_v * -viewSpacePosition.z;
                 float4 vReflectionEndPosInCS = mul(_ProjectionMatrix, float4(vReflectionEndPosInVS.xyz, 1));
                 vReflectionEndPosInCS /= vReflectionEndPosInCS.w;
-
                 vReflectionEndPosInCS.z = 1 - (vReflectionEndPosInCS.z);
                 clipSpace.z = 1 - (clipSpace.z);
 
@@ -583,6 +581,7 @@ Shader "Hidden/ssr_shader"
                 float3 outSamplePosInTS = float3(deconvertUv(i.uv), clipSpace.z);
 
                 float ddd = saturate(dot(_WorldSpaceViewDir, reflectionRay_w));
+                float thickness = 0.01f * (1 - ddd);
 
                 float hit = 0;
                 float mask = smoothstep(0, 0.1f, ddd);
@@ -594,7 +593,7 @@ Shader "Hidden/ssr_shader"
 
                 float iterations;
                 bool isSky;
-                float3 intersectPoint = hiZTrace(outSamplePosInTS, outReflDirInTS, numSteps, hit, iterations, isSky);
+                float3 intersectPoint = hiZTrace(thickness, outSamplePosInTS, outReflDirInTS, numSteps, hit, iterations, isSky);
                 
                 //convert back to unpadded uv
                 float2 realIntersectUv = convertUv(intersectPoint.xy);
