@@ -63,9 +63,23 @@ float Dither8x8(float2 ScreenPosition, float c0)
     float limit = float(dither[index] + 1) / 64.0;
     return saturate(c0 - limit);
 }
+#define M1 1597334677U
+#define M2 3812015801U
+float hash(uint2 q)
+{
+    q *= uint2(M1, M2);
+
+    uint n = (q.x ^ q.y) * M1;
+
+    return float(n) * (1.0 / float(0xffffffffU));
+}
+
+UNITY_DECLARE_TEX2DARRAY(_DepthPyramid);
+float2 _BlueNoiseTextures_TexelSize;
+Buffer<uint2> _DepthPyramidResolutions;
 
 //interleaved gradient noise
-inline float IGN(int pixelX, int pixelY, int frame)
+inline float IGN(uint pixelX, uint pixelY, uint frame)
 {
     frame = frame % 64; // need to periodically reset frame to avoid numerical issues
     float x = float(pixelX) + 5.588238f * float(frame);
@@ -73,7 +87,7 @@ inline float IGN(int pixelX, int pixelY, int frame)
     return fmod(52.9829189f * fmod(0.06711056f * float(x) + 0.00583715f * float(y), 1.0f), 1.0f);
 }
 
-inline uint NextPowerOf2(int value) {
+inline uint NextPowerOf2(uint value) {
     uint myNumberPowerOfTwo = 2 << firstbithigh(value - 1);
     return myNumberPowerOfTwo;
 }

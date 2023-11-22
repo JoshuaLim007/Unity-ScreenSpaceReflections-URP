@@ -157,10 +157,20 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                     Settings.SSR_Instance.SetInt("_DitherMode", 0);
                 }
                 GlobalLimSSRSettings.GlobalResolutionScale = 1.0f / Scale;
-                ScreenHeight = IsPadded ? cameraTextureDescriptor.height * GlobalLimSSRSettings.GlobalResolutionScale : cameraTextureDescriptor.height;
-                ScreenWidth = IsPadded ? cameraTextureDescriptor.width * GlobalLimSSRSettings.GlobalResolutionScale : cameraTextureDescriptor.width;
-                PaddedScreenWidth = IsPadded ? Mathf.NextPowerOfTwo((int)ScreenWidth) : ScreenWidth / Scale;
-                PaddedScreenHeight = IsPadded ? Mathf.NextPowerOfTwo((int)ScreenHeight) : ScreenHeight / Scale;
+                if (IsPadded)
+                {
+                    ScreenHeight = cameraTextureDescriptor.height * GlobalLimSSRSettings.GlobalResolutionScale;
+                    ScreenWidth = cameraTextureDescriptor.width * GlobalLimSSRSettings.GlobalResolutionScale;
+                    PaddedScreenWidth = Mathf.NextPowerOfTwo((int)ScreenWidth);
+                    PaddedScreenHeight = Mathf.NextPowerOfTwo((int)ScreenHeight);
+                }
+                else
+                {
+                    ScreenHeight = cameraTextureDescriptor.height;
+                    ScreenWidth = cameraTextureDescriptor.width;
+                    PaddedScreenWidth = ScreenWidth / Scale;
+                    PaddedScreenHeight = ScreenHeight / Scale;
+                }
 
                 cameraTextureDescriptor.colorFormat = RenderTextureFormat.DefaultHDR;
                 cameraTextureDescriptor.mipCount = 8;
@@ -177,6 +187,11 @@ namespace LimWorks.Rendering.URP.ScreenSpaceReflections
                     PaddedScale = paddedResolution / screenResolution;
                     Settings.SSR_Instance.SetVector("_PaddedResolution", paddedResolution);
                     Settings.SSR_Instance.SetVector("_PaddedScale", PaddedScale);
+
+                    float cx = 1.0f / (512.0f * paddedResolution.x);
+                    float cy = 1.0f / (512.0f * paddedResolution.y);
+
+                    Settings.SSR_Instance.SetVector("crossEpsilon", new Vector2(cx, cy));
                 }
                 else
                 {
