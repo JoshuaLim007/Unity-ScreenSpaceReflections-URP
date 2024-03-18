@@ -533,6 +533,7 @@ Shader "Hidden/ssr_shader"
                     ++iterations;
                 }
                 hit = level < endLevel ? 1 : 0;
+                hit = iterations > 0 ? hit : 0;
                 return ray;
             }
             half3 frag(v2f i) : SV_Target
@@ -598,6 +599,13 @@ Shader "Hidden/ssr_shader"
                 //convert back to unpadded uv
                 float2 realIntersectUv = convertUv(intersectPoint.xy);
                 float edgeMask = ScreenEdgeMask(realIntersectUv.xy * 2 - 1);
+
+                //backface check
+                float3 tnorm = UnpackNormal(tex2D(_GBuffer2, realIntersectUv.xy).rgb);
+                float d = dot(reflectionRay_w, tnorm);
+                if (d > 0) {
+                    edgeMask = 0;
+                }
 
                 mask *= hit * edgeMask;
                 return half3(intersectPoint.xy, mask);
