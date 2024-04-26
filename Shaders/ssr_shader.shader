@@ -600,11 +600,13 @@ Shader "Hidden/ssr_shader"
                 float2 realIntersectUv = convertUv(intersectPoint.xy);
                 float edgeMask = ScreenEdgeMask(realIntersectUv.xy * 2 - 1);
 
-                //backface check
-                float3 tnorm = UnpackNormal(tex2D(_GBuffer2, realIntersectUv.xy).rgb);
-                float d = dot(reflectionRay_w, tnorm);
-                if (d > 0) {
-                    edgeMask = 0;
+                //backface check only if depth is not sky
+                if (rawDepth == 0) {
+                    float3 tnorm = UnpackNormal(tex2D(_GBuffer2, realIntersectUv.xy).rgb);
+                    float d = dot(reflectionRay_w, tnorm);
+                    if (d > 0) {
+                        edgeMask = 0;
+                    }
                 }
 
                 mask *= hit * edgeMask;
